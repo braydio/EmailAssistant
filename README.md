@@ -6,7 +6,7 @@ Email with ChatGPT you lazy rube
 
 ### 1. Clone the Repository
 ```bash
-git clone <repository_url>
+git clone https://github.com/braydio/EmailAssistant.git
 cd EmailAssistant
 ```
 
