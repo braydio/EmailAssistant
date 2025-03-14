@@ -1,4 +1,3 @@
-
 # gpt_api.py
 import openai
 import os
@@ -9,7 +8,7 @@ import logging
 import tiktoken
 from datetime import datetime
 from dotenv import load_dotenv
-from config import USE_LOCAL_LLM, LOCAL_WEB_UI_URL
+from config import USE_LOCAL_LLM, ANYTHING_API_URL, ANYTHING_API_KEY
 
 # Load environment variables from .env file
 project_dir = os.path.dirname(__file__)
@@ -23,9 +22,10 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 if not openai.api_key and not USE_LOCAL_LLM:
     raise ValueError("OPENAI_API_KEY environment variable not set or failed to load from .env.")
 
-# Log file for GPT requests and responses
 gpt_request_log_path = os.path.join(project_dir, "gpt_requests.log")
 TIMESTAMP = datetime.now()
+WORKSPACE_SLUG = "emailgpt"
+
 
 def count_tokens(prompt, model="gpt-4o-mini"):
     try:
@@ -37,16 +37,10 @@ def count_tokens(prompt, model="gpt-4o-mini"):
 def log_gpt_request(prompt, api_response, token_count, log_file_path="gpt_requests.log"):
     """
     Logs detailed information about GPT interactions to the specified log file.
-
-    Args:
-        prompt (str): The prompt sent to GPT.
-        api_response (dict): The raw response object from GPT.
-        token_count (int): Token count used in request.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     model_used = api_response.get("model", "Unknown Model")
     total_tokens = api_response.get("usage", {}).get("total_tokens", "Unknown")
-
     log_entry = (
         "\n=== GPT Interaction ===\n"
         f"Timestamp      : {timestamp}\n"
@@ -62,7 +56,6 @@ def log_gpt_request(prompt, api_response, token_count, log_file_path="gpt_reques
         "=== END OF GPT INTERACTION ===\n"
         "\n"
     )
-
     try:
         with open(gpt_request_log_path, "a", encoding="utf-8") as log_file:
             log_file.write(log_entry)
@@ -73,16 +66,26 @@ def get_token(username, password):
     token = base64.b64encode(f"{username}:{password}".encode()).decode()
     return token
 
-def call_local_webui(url, username, password, message):
-    payload = {
-        "prompt": message,
-        "max_tokens": 1000
+def call_local_llm(prompt):
+    headers = {
+        "Authorization": f"Bearer {ANYTHING_API_KEY}",
+        "Content-Type": "application/json"
     }
-    response = requests.post(url, json=payload)
-    print(response.json())
-    if response.status_code != 200:
-        raise Exception(f"Request failed with status code: {response.status_code}")
-    return response.json()
+    payload = {
+        "message": prompt,
+        "mode": "query",
+        "workspaceSlug": WORKSPACE_SLUG
+    }
+
+    endpoint = f"{ANYTHING_API_URL}/v1/workspace/{WORKSPACE_SLUG}/chat"
+    response = requests.post(endpoint, headers=headers, json=payload)
+    
+    if response.ok:
+        print(response.json())
+        return response.json()
+    else:
+        logging.error(f"Local LLM error: {response.status_code} {response.text}")
+        return None
 
 def format_api_response(api_response):
     try:
@@ -95,9 +98,10 @@ def format_api_response(api_response):
 def ask_gpt(prompt):
     token_count = count_tokens(prompt, model="gpt-4o-mini")
     if USE_LOCAL_LLM:
+        completions_url = f"{ANYTHING_API_URL}/v1/workspace/{WORKSPACE_SLUG}/chat"
         try:
-            print(f"Sending request to GPT at url: {LOCAL_WEB_UI_URL}")
-            api_response = call_local_webui(LOCAL_WEB_UI_URL, username, password, prompt)
+            print(f"Sending request to EverythingLLM at: {completions_url}")
+            api_response = call_local_llm(prompt)
             formatted_response = format_api_response(api_response)
             log_gpt_request(prompt, api_response, token_count)
             return formatted_response
