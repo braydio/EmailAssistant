@@ -20,8 +20,7 @@ SENT_DIR = os.getenv("SENT_DIR", os.path.expanduser("~/.mail/Gmail/Sent"))
 FROMGPT_DIR = os.getenv("FROMGPT_DIR", os.path.expanduser("~/.mail/Gmail/FromGPT"))
 
 # LLM Configuration
-# LOCAL_WEBUI_URL = os.getenv("LOCAL_WEBUI_URL", "http://localhost:5000/api/chat")
-# USE_LOCAL_LLM = os.getenv("USE_LOCAL_LLM", "false").lower() == "true"
 USE_LOCAL_LLM = "true"
-LOCAL_WEB_UI_URL = os.getenv("LOCAL_WEB_UI_URL")  # e.g., "http://192.168.1.68:7860/v1/completions"
+# The EverythingLLM API endpoint (e.g., http://192.168.1.239:3001/api/v1)
+ANYTHING_API_URL = os.getenv("ANYTHING_API_URL")
 
