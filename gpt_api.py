@@ -1,3 +1,5 @@
+
+# gpt_api.py
 import openai
 import os
 import json
@@ -5,6 +7,7 @@ import requests
 import base64
 import logging
 import tiktoken
+from datetime import datetime
 from dotenv import load_dotenv
 from config import USE_LOCAL_LLM, LOCAL_WEB_UI_URL
 
@@ -22,30 +25,55 @@ if not openai.api_key and not USE_LOCAL_LLM:
 
 # Log file for GPT requests and responses
 gpt_request_log_path = os.path.join(project_dir, "gpt_requests.log")
+TIMESTAMP = datetime.now()
 
-def count_tokens(prompt, model="gpt-4"):
+def count_tokens(prompt, model="gpt-4o-mini"):
     try:
         encoding = tiktoken.encoding_for_model(model)
     except Exception:
         encoding = tiktoken.get_encoding("cl100k_base")
     return len(encoding.encode(prompt))
 
-def log_gpt_request(prompt, api_response, token_count):
-    with open(gpt_request_log_path, "a") as log_file:
-        log_file.write(f"--- GPT Request ---\n")
-        log_file.write(f"Token Count: {token_count}\n")
-        log_file.write(f"Prompt Sent:\n{prompt}\n")
-        log_file.write(f"--- GPT Response ---\n")
-        log_file.write(f"{json.dumps(api_response, indent=2)}\n")
-        log_file.write(f"--- End of GPT Interaction ---\n\n")
+def log_gpt_request(prompt, api_response, token_count, log_file_path="gpt_requests.log"):
+    """
+    Logs detailed information about GPT interactions to the specified log file.
+
+    Args:
+        prompt (str): The prompt sent to GPT.
+        api_response (dict): The raw response object from GPT.
+        token_count (int): Token count used in request.
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    model_used = api_response.get("model", "Unknown Model")
+    total_tokens = api_response.get("usage", {}).get("total_tokens", "Unknown")
+
+    log_entry = (
+        "\n=== GPT Interaction ===\n"
+        f"Timestamp      : {timestamp}\n"
+        f"Model: {model_used}\n"
+        f"Request Tokens: {token_count}\n"
+        f"Total Tokens Used: {total_tokens}\n\n"
+        "--- PROMPT START ---\n"
+        f"{prompt}\n"
+        "--- PROMPT END ---\n\n"
+        "--- RESPONSE START ---\n"
+        f"{json.dumps(api_response, indent=2)}\n"
+        "--- RESPONSE END ---\n"
+        "=== END OF GPT INTERACTION ===\n"
+        "\n"
+    )
+
+    try:
+        with open(gpt_request_log_path, "a", encoding="utf-8") as log_file:
+            log_file.write(log_entry)
+    except Exception as e:
+        logging.error(f"Error writing GPT log entry: {e}")
 
 def get_token(username, password):
-    # Example token generation using base64 encoding. Adjust as needed.
     token = base64.b64encode(f"{username}:{password}".encode()).decode()
     return token
 
 def call_local_webui(url, username, password, message):
-    print(f"Not needed username, pswd: {username} {password}")
     payload = {
         "prompt": message,
         "max_tokens": 1000
@@ -57,16 +85,6 @@ def call_local_webui(url, username, password, message):
     return response.json()
 
 def format_api_response(api_response):
-    """
-    Extracts the response text from the API response.
-    Assumes the local LLM returns a structure similar to:
-    {
-      "choices": [
-         { "text": "Your generated reply...", ... }
-      ],
-      ...
-    }
-    """
     try:
         text = api_response["choices"][0]["text"].strip()
     except Exception as e:
@@ -75,9 +93,10 @@ def format_api_response(api_response):
     return text
 
 def ask_gpt(prompt):
-    token_count = count_tokens(prompt, model="gpt-4")
+    token_count = count_tokens(prompt, model="gpt-4o-mini")
     if USE_LOCAL_LLM:
         try:
+            print(f"Sending request to GPT at url: {LOCAL_WEB_UI_URL}")
             api_response = call_local_webui(LOCAL_WEB_UI_URL, username, password, prompt)
             formatted_response = format_api_response(api_response)
             log_gpt_request(prompt, api_response, token_count)
@@ -90,7 +109,7 @@ def ask_gpt(prompt):
             raise RuntimeError("OpenAI API key is not set. Please check .env and environment variables.")
         try:
             api_response = openai.ChatCompletion.create(
-                model="gpt-4",
+                model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
             formatted_response = api_response['choices'][0]['message']['content']
@@ -99,3 +118,4 @@ def ask_gpt(prompt):
         except Exception as e:
             logging.error(f"Error during GPT API call: {e}")
             return None
+
