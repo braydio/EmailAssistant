@@ -1,3 +1,5 @@
+
+# search_emails.py
 import os
 import re
 from datetime import datetime
@@ -15,7 +17,6 @@ def search_emails(keyword):
     
     email_list = []
     lines = []
-    # Determine if keyword is a date or date range
     date_range_pattern = re.compile(r'(\d{4}-\d{2}-\d{2})\s*(to|-)\s*(\d{4}-\d{2}-\d{2})')
     single_date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
     filter_by_date = False
@@ -33,7 +34,6 @@ def search_emails(keyword):
     for email_file in email_files:
         file_path = os.path.join(inbox_path, email_file)
         subject, sender, _, date_str, date_obj = parse_email(file_path)
-        # If filtering by date, skip if date_obj is missing or out of range.
         if filter_by_date:
             if date_obj is None:
                 continue
@@ -48,7 +48,6 @@ def search_emails(keyword):
         print(f"No emails found matching the criteria '{keyword}'.")
         return
 
-    # Use fuzzy finder with initial query set to the keyword
     try:
         process = subprocess.Popen(
             ["fzf", "--query", keyword],
