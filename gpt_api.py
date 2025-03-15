@@ -1,4 +1,4 @@
-# gpt_api.py
+# gpt_api v.1.1.0.
 import openai
 import os
 import json
@@ -25,7 +25,6 @@ if not openai.api_key and not USE_LOCAL_LLM:
 gpt_request_log_path = os.path.join(project_dir, "gpt_requests.log")
 TIMESTAMP = datetime.now()
 WORKSPACE_SLUG = "emailgpt"
-
 
 def count_tokens(prompt, model="gpt-4o-mini"):
     try:
@@ -62,10 +61,6 @@ def log_gpt_request(prompt, api_response, token_count, log_file_path="gpt_reques
     except Exception as e:
         logging.error(f"Error writing GPT log entry: {e}")
 
-def get_token(username, password):
-    token = base64.b64encode(f"{username}:{password}".encode()).decode()
-    return token
-
 def call_local_llm(prompt):
     headers = {
         "Authorization": f"Bearer {ANYTHING_API_KEY}",
@@ -73,10 +68,11 @@ def call_local_llm(prompt):
     }
     payload = {
         "message": prompt,
-        "mode": "query",
-        "workspaceSlug": WORKSPACE_SLUG
+        "mode": "chat",
+        "sessionId": "GPT Mail Handler",
+        "attachments": []
     }
-
+    
     endpoint = f"{ANYTHING_API_URL}/v1/workspace/{WORKSPACE_SLUG}/chat"
     response = requests.post(endpoint, headers=headers, json=payload)
     
@@ -89,11 +85,22 @@ def call_local_llm(prompt):
 
 def format_api_response(api_response):
     try:
-        text = api_response["choices"][0]["text"].strip()
+        text = api_response.get("textResponse", "").strip()
+        sources = api_response.get("sources", [])
+        close = api_response.get("close", False)
+        error = api_response.get("error", None)
     except Exception as e:
         logging.error(f"Error formatting API response: {e}")
         text = None
-    return text
+        sources = []
+        close = False
+        error = None
+    return {
+            "text": text,
+            "sources": sources,
+            "close": close,
+            "error": error
+        }
 
 def ask_gpt(prompt):
     token_count = count_tokens(prompt, model="gpt-4o-mini")
