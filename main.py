@@ -62,7 +62,7 @@ def main():
         print("2. Silent Bulk Summarize and Process a range of emails")
         print("3. Fuzzy Find an email for reply (Interactive)")
         print("4. Generate and send a draft reply (Legacy)")
-        print("5. Check Reviewed Emails (Marked for review by ChatGPT)")
+        print("5. Review Flagged Emails (Flagged by LLM / ChatGPT)")
         print("6. Search emails by keyword/date")
         print("7. Apply Filter Rules (Interactive)")
         print("8. Apply Mail Rule (Interactive)")
