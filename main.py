@@ -1,36 +1,50 @@
-# main.py v. 1.0.0
+# main.py v1.0.2
+import json
 import os
+from rich import print
+from rich.table import Table
+from rich.console import Console
 from config import MAIN_INBOX, ARCHIVE_DIR, FOLLOWUP_DIR, TRASH_DIR
 from summarize import (
     summarize_all_unread_emails, 
-    summarize_specific_email, 
-    bulk_summarize_and_process, 
     bulk_summarize_and_process_silent,
     apply_filter_rules, 
     reply_to_email,
     search_emails
 )
-from manual_review import review_suggestions, manual_review_process
+from manual_review import manual_review_process
 from draft_reply import generate_draft_reply
 from mail_rules import interactive_rule_application
 from batch_cleanup import batch_cleanup_analysis
-# Import new module for reviewing marked emails
 import review_marked
+
+console = Console()
 
 def count_emails(directory):
     return len([f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))])
 
+def get_email_status():
+    return {
+        " Inbox": count_emails(MAIN_INBOX),
+        "󰇱 Archive": count_emails(ARCHIVE_DIR),
+        "󰇯 Review": count_emails(FOLLOWUP_DIR),
+        "󰗩 Trash": count_emails(TRASH_DIR),
+    }
+
 def print_email_status():
-    inbox_count = count_emails(MAIN_INBOX)
-    archive_count = count_emails(ARCHIVE_DIR)
-    review_count = count_emails(FOLLOWUP_DIR)
-    trash_count = count_emails(TRASH_DIR)
-    print("\n=== Email Status ===")
-    print(f"Inbox: {inbox_count}")
-    print(f"Archive: {archive_count}")
-    print(f"Review: {review_count}")
-    print(f"Trash: {trash_count}")
-    print("====================\n")
+    status = get_email_status()
+
+    with open("email_summary.json", "w") as summary:
+        json.dump(status, summary, indent=4)
+
+    table = Table(title=f"󰺘 Email Status", style="bold cyan")
+    table.add_column("Category", style="bold white")
+    table.add_column("Count", justify="right", style="magenta")
+
+    for key, value in status.items():
+        table.add_row(key, str(value))
+
+    console.print(table)
 
 def clear_archive():
     """
@@ -38,40 +52,55 @@ def clear_archive():
     """
     email_files = [f for f in os.listdir(ARCHIVE_DIR) if os.path.isfile(os.path.join(ARCHIVE_DIR, f))]
     if not email_files:
-        print("Archive folder is already empty.")
+        console.print("[yellow]Archive folder is already empty.[/yellow]")
         return
-    confirm = input("Are you sure you want to clear the Archive folder? This will delete all archived emails. (yes/no): ").strip().lower()
+
+    confirm = input("Are you sure you want to clear the Archive folder? (yes/no): ").strip().lower()
     if confirm == "yes":
         for email_file in email_files:
             file_path = os.path.join(ARCHIVE_DIR, email_file)
             try:
                 os.remove(file_path)
-                print(f"Deleted archived email: {email_file}")
+                console.print(f"[red]Deleted archived email:[/red] {email_file}")
             except Exception as e:
-                print(f"Error deleting {email_file}: {e}")
-        print("Archive folder cleared.")
+                console.print(f"[bold red]Error deleting {email_file}: {e}[/bold red]")
+        console.print("[green]Archive folder cleared.[/green]")
     else:
-        print("Clear archive cancelled.")
+        console.print("[yellow]Clear archive cancelled.[/yellow]")
+
+def print_menu():
+    table = Table(title="📌 Email Assistant Menu", style="bold green")
+    table.add_column("Option", style="bold cyan")
+    table.add_column("Action", style="bold white")
+
+    menu_options = {
+        "1": "Summarize all unread emails",
+        "2": "Silent Bulk Summarize and Process emails",
+        "3": "Fuzzy Find an email for reply",
+        "4": "Generate and send a draft reply",
+        "5": "Review Flagged Emails (AI-flagged)",
+        "6": "Search emails by keyword/date",
+        "7": "Apply Filter Rules (Interactive)",
+        "8": "Apply Mail Rule (Interactive)",
+        "9": "Batch Cleanup Analysis (Top Senders)",
+        "10": "Manual Review Process (with Embedding)",
+        "11": "Clear Archive Box",
+        "0": "[bold red]Exit[/bold red]"
+    }
+
+    for key, value in menu_options.items():
+        table.add_row(key, value)
+
+    console.print(table)
 
 def main():
-    print("Welcome to the Email Assistant!")
+    console.print("[bold cyan]Welcome to the Email Assistant![/bold cyan]")
     print_email_status()
+
     while True:
-        print("\nOptions:")
-        print("1. Summarize all unread emails")
-        print("2. Silent Bulk Summarize and Process a range of emails")
-        print("3. Fuzzy Find an email for reply (Interactive)")
-        print("4. Generate and send a draft reply (Legacy)")
-        print("5. Review Flagged Emails (Flagged by LLM / ChatGPT)")
-        print("6. Search emails by keyword/date")
-        print("7. Apply Filter Rules (Interactive)")
-        print("8. Apply Mail Rule (Interactive)")
-        print("9. Batch Cleanup Analysis (Top 3 Senders)")
-        print("10. Manual Review Process (with Embedding)")
-        print("11. Clear Archive Box")
-        print("0. Exit")
-        
+        print_menu()
         choice = input("Choose an option: ").strip()
+
         if choice == "1":
             summarize_all_unread_emails()
         elif choice == "2":
@@ -79,9 +108,9 @@ def main():
             num_emails = int(num) if num.isdigit() else None
             bulk_summarize_and_process_silent(num_emails)
         elif choice == "3":
-            reply_to_email()  # This function already performs fuzzy selection if no email is specified.
+            reply_to_email()
         elif choice == "4":
-            print("\nGenerating and sending draft reply (legacy)...")
+            console.print("\n[bold yellow]Generating and sending draft reply...[/bold yellow]")
             generate_draft_reply(send=True)
         elif choice == "5":
             review_marked.review_marked_emails()
@@ -98,17 +127,18 @@ def main():
             try:
                 num = int(input("Enter number of emails to review manually: ").strip())
             except ValueError:
-                print("Invalid number.")
+                console.print("[bold red]Invalid number.[/bold red]")
                 num = 0
             if num > 0:
                 manual_review_process(num)
         elif choice == "11":
             clear_archive()
         elif choice == "0":
-            print("Goodbye!")
+            console.print("[bold red]Goodbye! [/bold red]")
             break
         else:
-            print("Invalid choice. Please try again.")
+            console.print("[bold red]Invalid choice. Please try again.[/bold red]")
+
         print_email_status()
 
 if __name__ == "__main__":
