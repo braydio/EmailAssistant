@@ -1,4 +1,4 @@
-.env
+*.env
 .venv
 .git
 __pycache__/
@@ -11,3 +11,7 @@ fastcat.txt
 *.INSTRUCT
 *.instruct
 *.dev
+*.txt
+!requirements.txt
+backups/*
+*.json
