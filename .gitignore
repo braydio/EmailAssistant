@@ -5,4 +5,9 @@ __pycache__/
 *dev
 replies/
 *.log
-
+fastcat.txt
+.fastcat.txt
+.tree-map.txt
+*.INSTRUCT
+*.instruct
+*.dev
