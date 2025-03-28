@@ -21,6 +21,8 @@ FROMGPT_DIR = os.getenv("FROMGPT_DIR", os.path.expanduser("~/.mail/Gmail/FromGPT
 
 # LLM Configuration
 USE_LOCAL_LLM = "true"
+
+LOCAL_AI_BASE_URL = os.getenv("LOCAL_AI_URL")
 # The EverythingLLM API endpoint (e.g., http://192.168.1.239:3001/api/v1)
 ANYTHING_API_URL = os.getenv("ANYTHING_API_URL")
 ANYTHING_API_KEY = os.getenv("ANYTHING_API_KEY")
