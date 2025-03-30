@@ -1,54 +1,50 @@
 
 import os
 from collections import Counter, defaultdict
-from config import MAIN_INBOX
+from config import MAIN_INBOX, IMPORTANT_DIR
 from utils import parse_email
 from gpt_api import ask_gpt
 
 def batch_cleanup_analysis():
     """
     Batch together the three most frequent email senders and the associated emails
-    (filenames, date, subject) and send them to ChatGPT with a request to determine
-    which emails can be deleted.
+    (filenames, date, subject) from Inbox and Important mailboxes, and send them to ChatGPT
+    with a request to determine which emails can be deleted.
     """
-    # List all email files in the main inbox.
-    email_files = [f for f in os.listdir(MAIN_INBOX) if os.path.isfile(os.path.join(MAIN_INBOX, f))]
-    if not email_files:
-        print("No emails found in the main inbox.")
-        return
-
-    # Build frequency counts and group emails by sender.
+    mailboxes = [("Inbox", MAIN_INBOX), ("Important", IMPORTANT_DIR)]
     sender_counts = Counter()
     sender_emails = defaultdict(list)
 
-    for email_file in email_files:
-        file_path = os.path.join(MAIN_INBOX, email_file)
-        subject, sender, _, date_str, _ = parse_email(file_path)
-        sender_counts[sender] += 1
-        sender_emails[sender].append({
-            'filename': email_file,
-            'subject': subject,
-            'date': date_str
-        })
+    for mailbox_name, mailbox_path in mailboxes:
+        if not os.path.exists(mailbox_path):
+            continue
+        email_files = [f for f in os.listdir(mailbox_path) if os.path.isfile(os.path.join(mailbox_path, f))]
+        for email_file in email_files:
+            file_path = os.path.join(mailbox_path, email_file)
+            subject, sender, _, date_str, _ = parse_email(file_path)
+            sender_counts[sender] += 1
+            sender_emails[sender].append({
+                'filename': email_file,
+                'subject': subject,
+                'date': date_str,
+                'mailbox': mailbox_name
+            })
 
-    # Get the top three most frequent senders.
     top_senders = sender_counts.most_common(3)
     if not top_senders:
         print("No sender information found.")
         return
 
-    # Construct the details message.
     message_details = "Top 3 Most Frequent Email Senders and Their Emails:\n\n"
     for sender, count in top_senders:
         message_details += f"Sender: {sender} (Total Emails: {count})\n"
         for email_info in sender_emails[sender]:
             message_details += (
-                f"  - Filename: {email_info['filename']}, Date: {email_info['date']}, "
+                f"  - Filename: {email_info['filename']} (Mailbox: {email_info['mailbox']}), Date: {email_info['date']}, "
                 f"Subject: {email_info['subject']}\n"
             )
         message_details += "\n"
 
-    # Create the prompt for ChatGPT.
     prompt = (
         f"I have a batch of emails from the top 3 most frequent senders:\n\n"
         f"{message_details}\n"
@@ -66,3 +62,4 @@ def batch_cleanup_analysis():
 
 if __name__ == "__main__":
     batch_cleanup_analysis()
+
