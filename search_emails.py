@@ -1,20 +1,13 @@
-
 # search_emails.py
 import os
 import re
 from datetime import datetime
 import subprocess
 from utils import parse_email
-from config import MAIN_INBOX
+from config import MAIN_INBOX, IMPORTANT_DIR
 
 def search_emails(keyword):
-    inbox_path = MAIN_INBOX
-    email_files = [f for f in os.listdir(inbox_path) if os.path.isfile(os.path.join(inbox_path, f))]
-    
-    if not email_files:
-        print("No emails found in inbox.")
-        return
-    
+    mailboxes = [("Inbox", MAIN_INBOX), ("Important", IMPORTANT_DIR)]
     email_list = []
     lines = []
     date_range_pattern = re.compile(r'(\d{4}-\d{2}-\d{2})\s*(to|-)\s*(\d{4}-\d{2}-\d{2})')
@@ -31,18 +24,22 @@ def search_emails(keyword):
         end_date = start_date
         filter_by_date = True
 
-    for email_file in email_files:
-        file_path = os.path.join(inbox_path, email_file)
-        subject, sender, _, date_str, date_obj = parse_email(file_path)
-        if filter_by_date:
-            if date_obj is None:
-                continue
-            email_date = date_obj.date()
-            if not (start_date.date() <= email_date <= end_date.date()):
-                continue
-        line = f"From: {sender} | Subject: {subject} | Date: {date_str} | File: {email_file}"
-        lines.append(line)
-        email_list.append((email_file, sender, subject, date_str))
+    for mailbox_name, mailbox_path in mailboxes:
+        if not os.path.exists(mailbox_path):
+            continue
+        email_files = [f for f in os.listdir(mailbox_path) if os.path.isfile(os.path.join(mailbox_path, f))]
+        for email_file in email_files:
+            file_path = os.path.join(mailbox_path, email_file)
+            subject, sender, _, date_str, date_obj = parse_email(file_path)
+            if filter_by_date:
+                if date_obj is None:
+                    continue
+                email_date = date_obj.date()
+                if not (start_date.date() <= email_date <= end_date.date()):
+                    continue
+            line = f"[{mailbox_name}] From: {sender} | Subject: {subject} | Date: {date_str} | File: {email_file}"
+            lines.append(line)
+            email_list.append((email_file, sender, subject, date_str))
     
     if not lines:
         print(f"No emails found matching the criteria '{keyword}'.")
