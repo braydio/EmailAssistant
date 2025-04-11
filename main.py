@@ -1,5 +1,4 @@
 
-# main.py v1.0.2
 import json
 import os
 from rich import print
@@ -8,6 +7,7 @@ from rich.console import Console
 from config import MAIN_INBOX, ARCHIVE_DIR, FOLLOWUP_DIR, TRASH_DIR, IMPORTANT_DIR
 from summarize import (
     summarize_all_unread_emails, 
+    summarize_specific_email,  # new two-step process function
     bulk_summarize_and_process_silent,
     apply_filter_rules, 
     reply_to_email,
@@ -76,7 +76,7 @@ def print_menu():
     table.add_column("Action", style="bold white")
 
     menu_options = {
-        "1": "Summarize all unread emails",
+        "1": "Summarize all unread emails (New Process)",
         "2": "Silent Bulk Summarize and Process emails",
         "3": "Fuzzy Find an email for reply",
         "4": "Generate and send a draft reply",
@@ -105,6 +105,7 @@ def main():
         choice = input("Choose an option: ").strip()
 
         if choice == "1":
+            # Uses the new two-step summarization (summary then action) for all unread emails.
             summarize_all_unread_emails()
         elif choice == "2":
             num = input("Enter number of emails to process silently (or press Enter for all): ").strip()
@@ -116,7 +117,6 @@ def main():
             console.print("\n[bold yellow]Generating and sending draft reply...[/bold yellow]")
             generate_draft_reply(send=True)
         elif choice == "5":
-            import review_marked
             review_marked.review_marked_emails()
         elif choice == "6":
             keyword = input("Enter keyword or date (YYYY-MM-DD) / range (YYYY-MM-DD to YYYY-MM-DD): ").strip()
@@ -128,7 +128,6 @@ def main():
         elif choice == "9":
             batch_cleanup_analysis()
         elif choice == "10":
-            from manual_review import manual_review_process
             try:
                 num = int(input("Enter number of emails to review manually: ").strip())
             except ValueError:
@@ -139,7 +138,6 @@ def main():
         elif choice == "11":
             clear_archive()
         elif choice == "12":
-            import review_marked
             review_marked.review_important_emails()
         elif choice == "0":
             console.print("[bold red]Goodbye! [/bold red]")
