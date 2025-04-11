@@ -1,14 +1,23 @@
-# embedding.py
+
 import requests
 import logging
 from config import ANYTHING_API_URL, ANYTHING_API_KEY
 
 WORKSPACE_SLUG = "emailgpt"
 
-def send_embedding(log_data):
+def send_embedding(file_reference):
     """
-    Sends log data to the EverythingLLM /v1/embed endpoint for the 'emailgpt' workspace.
-    log_data should be a JSON-serializable object.
+    Sends a file reference to the EverythingLLM embedding endpoint for the 'emailgpt' workspace.
+    
+    Parameters:
+        file_reference (str): A string representing the file path (relative to the custom documents folder)
+                              e.g., "custom-documents/manual_review_log.json".
+    
+    The payload is built as:
+    {
+        "adds": [ <file_reference> ],
+        "deletes": []
+    }
     """
     embed_url = f"{ANYTHING_API_URL}/v1/workspace/{WORKSPACE_SLUG}/update-embeddings"
 
@@ -17,7 +26,7 @@ def send_embedding(log_data):
         'Content-Type': 'application/json'
     }
     payload = {
-        "adds": ["manual_review_log.json"],
+        "adds": [file_reference],
         "deletes": []
     }
     try:
@@ -27,7 +36,9 @@ def send_embedding(log_data):
             return response.json()
         else:
             print(f"Embedding request failed with status code: {response.status_code}")
+            print("Response content:", response.content)
             return None
     except Exception as e:
         logging.error(f"Error sending embedding: {e}")
         return None
+
