@@ -77,22 +77,26 @@ def call_local_embedding(text):
         logging.error(f"Local Embedding call failed: {e}")
         return {"error": str(e)}
 
+
 def call_local_llm(prompt, model="Qwen2.5-Coder-7B-Instruct"):
     try:
         url = f"{LOCAL_AI_BASE_URL}/v1/chat/completions"
-        console.print(f"[blue]Sending to URL {url} message: {prompt}[/blue]")
+        console.print(f"[blue]LocalAI Request:[/blue] [cyan]{prompt[:100]}...[/cyan]")
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens":1000, 
+            "max_tokens": 1000,
             "temperature": 0.2
         }
         response = requests.post(url, json=payload)
         response.raise_for_status()
-        return response.json()
+        result = response.json()
+        console.print("[green]LocalAI Response received.[/green]")
+        return result
     except Exception as e:
-        logging.error(f"Local LLM call failed: {e}")
+        console.print(f"[red]LocalAI call failed:[/red] {e}")
         return {"error": str(e)}
+
 
 def format_api_response(api_response):
     """
@@ -115,7 +119,7 @@ def ask_gpt(prompt, model="gpt-4"): # Qwen2.5-Coder-7B-Instruct
     token_count = count_tokens(prompt, model=model)
     if USE_LOCAL_LLM:
         try:
-            console.print(f"[bold green]Calling LocalAI at 192.168.1.239:8080[/bold green]")
+            console.print(f"[bold green]Calling LocalAI at {LOCAL_AI_BASE_URL}[/bold green]")
             api_response = call_local_llm(prompt, model=model)
             formatted_response = format_api_response(api_response)
             log_gpt_request(prompt, api_response, token_count)
