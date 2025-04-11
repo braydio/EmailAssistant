@@ -1,7 +1,8 @@
-# manual_review.py
+
 import os
 import shutil
 import json
+import subprocess
 from datetime import datetime
 from rich.console import Console
 from rich.table import Table
@@ -17,8 +18,11 @@ def review_suggestions():
     Legacy manual review process updated with Rich for styling.
     """
     inbox_path = MAIN_INBOX
-    email_files = [os.path.join(inbox_path, f) for f in os.listdir(inbox_path)
-                   if os.path.isfile(os.path.join(inbox_path, f))]
+    email_files = [
+        os.path.join(inbox_path, f)
+        for f in os.listdir(inbox_path)
+        if os.path.isfile(os.path.join(inbox_path, f))
+    ]
     if not email_files:
         console.print("[yellow]No new emails found.[/yellow]")
         return
@@ -50,10 +54,14 @@ def manual_review_process(num_emails):
     """
     Performs manual review for a specified number of emails from MAIN_INBOX.
     For each email, displays details and prompts the reviewer to select an action.
-    The decision is logged in JSON format and then sent to the embedding endpoint.
+    The decision is logged in JSON format, transferred to a remote server via SCP,
+    and then the file reference is sent to the embedding endpoint.
     """
-    inbox_files = [f for f in os.listdir(MAIN_INBOX) 
-                   if os.path.isfile(os.path.join(MAIN_INBOX, f))]
+    inbox_files = [
+        f
+        for f in os.listdir(MAIN_INBOX)
+        if os.path.isfile(os.path.join(MAIN_INBOX, f))
+    ]
     if not inbox_files:
         console.print("[yellow]No emails found in inbox for manual review.[/yellow]")
         return
@@ -103,7 +111,7 @@ def manual_review_process(num_emails):
             "subject": subject,
             "date": date_str,
             "chosen_action": chosen_action,
-            "timestamp": timestamp
+            "timestamp": timestamp,
         }
         review_log.append(log_entry)
 
@@ -143,8 +151,22 @@ def manual_review_process(num_emails):
     except Exception as e:
         console.print(f"[red]Error saving manual review log: {e}[/red]")
 
-    # Send the log to the embedding endpoint
-    embedding_response = send_embedding(review_log)
+    # Transfer the log file to the remote server using SCP
+    scp_command = [
+        "scp",
+        log_file,
+        f"{os.getenv('REMOTE_USER')}@{os.getenv('REMOTE_HOST')}:{os.getenv('REMOTE_PATH')}/manual_review_log.json",
+    ]
+    try:
+        result = subprocess.run(scp_command, check=True, capture_output=True, text=True)
+        console.print("[green]Manual review log transferred to remote server successfully.[/green]")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]File transfer failed: {e.stderr}[/red]")
+        return
+
+    # Send the log to the embedding endpoint.
+    # Note: The file reference must include the folder prefix per API docs.
+    embedding_response = send_embedding("custom-documents/manual_review_log.json")
     if embedding_response:
         console.print("[green]Manual review log successfully sent to embedding endpoint.[/green]")
     else:
