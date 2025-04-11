@@ -7,6 +7,9 @@ from email import message_from_file
 from email.policy import default
 import subprocess
 import json
+from rich.console import Console
+
+console = Console()
 
 def format_email_body(body):
     if "<html" in body.lower():
@@ -55,9 +58,12 @@ def parse_email(file_path):
 
 def send_notification(subject, sender, recommendation):
     try:
-        subprocess.run(["notify-send", "-t", "5000", "New Email Recommendation", f"From: {sender}\nSubject: {subject}\nAction: {recommendation}"])
+        notification_msg = f"{subject} | Action: {recommendation}"
+        subprocess.run(["notify-send", "Email Action Recommended", notification_msg])
+        console.print(f"[green]Notification sent:[/green] {notification_msg}")
     except Exception as e:
-        logging.error(f"Error sending notification: {e}")
+        console.print(f"[red]Notification failed:[/red] {e}")
+
 
 def fuzzy_select_email(email_info):
     lines = []
