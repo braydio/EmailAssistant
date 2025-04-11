@@ -27,3 +27,7 @@ LOCAL_AI_BASE_URL = os.getenv("LOCAL_AI_URL")
 ANYTHING_API_URL = os.getenv("ANYTHING_API_URL")
 ANYTHING_API_KEY = os.getenv("ANYTHING_API_KEY")
 
+# Embedding details
+REMOTE_HOST = os.getenv("REMOTE_HOST")
+REMOTE_USER = os.getenv("REMOTE_USER")
+REMOTE_PATH = os.getenv("REMOTE_PATH")
