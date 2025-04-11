@@ -1,11 +1,12 @@
 
-# summarize.py
 import os
 import shutil
+import json
 from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
+
 from utils import (
     parse_email, 
     send_notification, 
@@ -20,53 +21,67 @@ from draft_reply import generate_draft_reply
 
 console = Console()
 
-def list_emails_for_summary(inbox_path=MAIN_INBOX):
-    """
-    Lists emails in the specified inbox directory (default: MAIN_INBOX) in a clean Rich table.
-    Returns a list of [index, sender, subject, filename, date_str].
-    """
-    email_files = [f for f in os.listdir(inbox_path) if os.path.isfile(os.path.join(inbox_path, f))]
-    if not email_files:
-        console.print("[yellow]No new emails found.[/yellow]")
-        return None
-    email_info = []
-    table = Table(title="Available Emails", show_header=True, header_style="bold magenta")
-    table.add_column("No.", style="bold")
-    table.add_column("From", style="cyan")
-    table.add_column("Subject", style="green")
-    table.add_column("Date", style="yellow")
-    for i, email_file in enumerate(email_files):
-        subject, sender, _, date_str, _ = parse_email(os.path.join(inbox_path, email_file))
-        email_info.append([i + 1, sender, subject, email_file, date_str])
-        table.add_row(str(i + 1), sender, subject, date_str)
-    console.print(table)
-    return email_info
-
 def summarize_all_unread_emails():
     """
     Summarizes all unread emails in the MAIN_INBOX.
     """
     inbox_path = MAIN_INBOX
-    email_files = [os.path.join(inbox_path, f) for f in os.listdir(inbox_path)
-                   if os.path.isfile(os.path.join(inbox_path, f))]
+    email_files = [
+        os.path.join(inbox_path, f) 
+        for f in os.listdir(inbox_path) 
+        if os.path.isfile(os.path.join(inbox_path, f))
+    ]
     if not email_files:
         console.print("[yellow]No new emails found.[/yellow]")
         return
     for email_file in email_files:
         summarize_specific_email(os.path.basename(email_file))
 
+def list_emails_for_summary(inbox_path=MAIN_INBOX):
+    """
+    Lists emails in the specified inbox directory (default: MAIN_INBOX) in a clean Rich table.
+    Returns a list of [index, sender, subject, filename, date_str].
+    """
+    email_files = [
+        f for f in os.listdir(inbox_path)
+        if os.path.isfile(os.path.join(inbox_path, f))
+    ]
+    if not email_files:
+        console.print("[yellow]No new emails found.[/yellow]")
+        return None
+
+    email_info = []
+    table = Table(title="Available Emails", show_header=True, header_style="bold magenta")
+    table.add_column("No.", style="bold")
+    table.add_column("From", style="cyan")
+    table.add_column("Subject", style="green")
+    table.add_column("Date", style="yellow")
+
+    for i, email_file in enumerate(email_files):
+        subject, sender, _, date_str, _ = parse_email(os.path.join(inbox_path, email_file))
+        email_info.append([i + 1, sender, subject, email_file, date_str])
+        table.add_row(str(i + 1), sender, subject, date_str)
+
+    console.print(table)
+    return email_info
+
 def summarize_specific_email(email_file=None, silent=False):
     """
-    Summarizes a specific email. If email_file is not provided,
-    the user is prompted to select one using a Rich table display.
-    In silent mode, returns a dictionary with summary details.
+    Summarizes a specific email and then (optionally) executes an action.
+    In silent mode, returns a dict of details so the caller
+    can handle the action instead of executing it directly.
     """
     inbox_path = MAIN_INBOX
+
+    # --- Identify email ---
     if not email_file:
         email_info = list_emails_for_summary(inbox_path)
         if not email_info:
             return
-        user_input = Prompt.ask("\nEnter the number of the email to summarize (or press Enter to search)", default="")
+        user_input = Prompt.ask(
+            "\nEnter the number of the email to summarize (or press Enter to search)",
+            default=""
+        )
         if user_input == "":
             email_file = fuzzy_select_email(email_info)
             if not email_file:
@@ -90,97 +105,117 @@ def summarize_specific_email(email_file=None, silent=False):
         return None
 
     subject, sender, body, date_str, _ = parse_email(file_path)
-    prompt = (
-        "You are an email assistant. Summarize this email in under 50 words.\n"
-        "Generate ONLY this output. Do not generate more, Do not generate less.\n"
-        "FORMAT:\n"
-        "{{Email Assistant}}: < Provides an email summary in 50 words or less >\n"
-        "{{Email Assistant}}: ACTION: < REVIEW / DELETE / REPLY / ARCHIVE >\n\n"
-        "Available ACTIONS: \n"
-        "ACTION: DELETE\n"
-        "ACTION: REPLY\n"
-        "ACTION: REVIEW\n"
-        "ACTION: ARCHIVE\n"
-        "If unsure, select ACTION: ARCHIVE\n"
-        f"From: {sender}\nSubject: {subject}\nDate: {date_str}\n\n{body}\n\n"
-        "{{Email Assistant}}: ACTION: REVIEW \\ ACTION: ARCHIVE \\ ACTION: DELETE \\ ACTION: REPLY \\ \n"
+
+    # --- Generate email summary ---
+    summary_prompt = (
+        "You are an email assistant. Summarize the following email in under 50 words."
+        f"\nFrom: {sender}\nSubject: {subject}\nDate: {date_str}\n{body}\n"
     )
-    recommendation_obj = ask_gpt(prompt)
-    if recommendation_obj:
-        if isinstance(recommendation_obj, dict):
-            recommendation = recommendation_obj.get("text", "")
-        else:
-            recommendation = recommendation_obj
-        if not silent:
-            console.print("\n[bold underline]Email Summary[/bold underline]")
-            console.print(f"[cyan]From:[/cyan] {sender}   [green]Date:[/green] {date_str}")
-            console.print(f"[magenta]Subject:[/magenta] {subject}\n")
-            console.print(f"[bold]Recommendation/Analysis:[/bold]\n{recommendation}\n")
-            send_notification(subject, sender, recommendation)
-        # Process any RULE lines in the recommendation
-        for line in recommendation.splitlines():
-            if line.strip().startswith("RULE:"):
-                record_filter_rule(line.strip())
-                break
-        category_name = None
-        for line in recommendation.splitlines():
-            if line.strip().startswith("CATEGORY:"):
-                parts = line.split("CATEGORY:", 1)
-                if len(parts) == 2:
-                    category_name = parts[1].strip()
-                break
+    console.print(f"[blue]\nGenerating summary for:[/blue] [yellow]{subject}[/yellow] from [cyan]{sender}[/cyan]")
+    summary_response = ask_gpt(summary_prompt)
+    # Parse the response text from LocalAI (JSON string) to a dict.
+    raw_summary = summary_response.get("text", "")
+    summary_content = ""
+    if raw_summary:
+        try:
+            parsed_summary = json.loads(raw_summary)
+            summary_content = parsed_summary.get("choices", [{}])[0].get("message", {}).get("content", "")
+        except json.JSONDecodeError:
+            console.print("[red]Failed to parse JSON from LocalAI summary response.[/red]")
+    console.print(f"[bold magenta]Summary:[/bold magenta] {summary_content}")
 
-        if "ACTION: ARCHIVE" in recommendation:
-            recommended_action = "ARCHIVE"
-        elif "ACTION: REVIEW" in recommendation:
-            recommended_action = "REVIEW"
-        elif "ACTION: DELETE" in recommendation:
-            recommended_action = "DELETE"
-        elif "ACTION: REPLY" in recommendation:
-            recommended_action = "REPLY"
-        else:
-            recommended_action = "NONE"
+    # --- Generate action recommendation ---
+    action_prompt = (
+        "Read the following email summary.\n"
+        "Based on the summary, which of the 4 options should be executed for this email?\n"
+        "Choose DELETE if the email is not important.\n"
+        "Choose REPLY if the email requires a reply.\n"
+        "Choose REVIEW if the email should be reviewed but doesn't need a reply.\n"
+        "Choose ARCHIVE if the email should be archived or if unsure.\n"
+        f"\nEmail Summary: {summary_content}\n"
+        "\nRespond with only 2 words formatted like:\n"
+        "ACTION: ARCHIVE\nACTION: DELETE\nACTION: REPLY\nACTION: REVIEW\n"
+    )
+    console.print("[blue]Determining recommended action...[/blue]")
+    action_response = ask_gpt(action_prompt)
+    raw_action = action_response.get("text", "")
+    action_text = ""
+    if raw_action:
+        try:
+            parsed_action = json.loads(raw_action)
+            action_text = parsed_action.get("choices", [{}])[0].get("message", {}).get("content", "")
+        except json.JSONDecodeError:
+            console.print("[red]Failed to parse JSON from LocalAI action response.[/red]")
 
-        if not silent:
-            if recommended_action == "ARCHIVE":
-                move_email_with_category(email_file, ARCHIVE_DIR, category_name)
-                console.print("[green]Email archived.[/green]\n")
-            elif recommended_action == "REVIEW":
-                move_email_with_category(email_file, FOLLOWUP_DIR, category_name)
-                console.print("[yellow]Email moved to review (follow-up folder).[/yellow]\n")
-            elif recommended_action == "DELETE":
-                move_email_with_category(email_file, TRASH_DIR, category_name)
-                console.print("[red]Email moved to trash.[/red]\n")
-            elif recommended_action == "REPLY":
-                send_input = Prompt.ask("Send generated reply? (yes/no)", default="no")
-                if send_input.lower() == "yes":
-                    generate_draft_reply(email_file=email_file, view_original=True, view_reply=True, send=True)
-                    console.print("[green]Reply sent.[/green]\n")
-                else:
-                    console.print("[italic]Reply generation skipped.[/italic]\n")
-            return
-        else:
-            try:
-                dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-                clean_date = f"{dt.month}-{dt.day}-{str(dt.year)[2:]}"
-            except Exception:
-                clean_date = date_str
+    # --- Extract RULE/CATEGORY lines ---
+    category_name = None
+    for line in action_text.splitlines():
+        line_stripped = line.strip()
+        if line_stripped.startswith("RULE:"):
+            record_filter_rule(line_stripped)
+        elif line_stripped.startswith("CATEGORY:"):
+            parts = line_stripped.split("CATEGORY:", 1)
+            if len(parts) == 2:
+                category_name = parts[1].strip()
 
-            result = {
-                "email_file": email_file,
-                "sender": sender,
-                "subject": subject,
-                "date_str": date_str,
-                "clean_date": clean_date,
-                "recommended_action": recommended_action,
-                "category": category_name,
-                "recommendation": recommendation
-            }
-            return result
+    # --- Determine recommended action ---
+    if "ACTION: ARCHIVE" in action_text:
+        recommended_action = "ARCHIVE"
+    elif "ACTION: REVIEW" in action_text:
+        recommended_action = "REVIEW"
+    elif "ACTION: DELETE" in action_text:
+        recommended_action = "DELETE"
+    elif "ACTION: REPLY" in action_text:
+        recommended_action = "REPLY"
     else:
-        if not silent:
-            console.print(f"[red]Failed to summarize or recommend an action for: {email_file}[/red]")
+        recommended_action = "NONE"
+
+    # --- If interactive, execute action immediately ---
+    if not silent:
+        console.print(f"[bold green]Recommended Action:[/bold green] {recommended_action}")
+        console.print("\n[bold underline]Email Summary[/bold underline]")
+        console.print(f"[cyan]From:[/cyan] {sender}   [green]Date:[/green] {date_str}")
+        console.print(f"[magenta]Subject:[/magenta] {subject}\n")
+        console.print(f"[bold]Summary:[/bold]\n{summary_content}\n")
+        console.print(f"[bold]Recommended Action:[/bold] {recommended_action}\n")
+        send_notification(subject, sender, f"Summary: {summary_content}\nAction: {recommended_action}")
+
+        if recommended_action == "ARCHIVE":
+            move_email_with_category(email_file, ARCHIVE_DIR, category_name)
+            console.print("[green]Email archived.[/green]\n")
+        elif recommended_action == "REVIEW":
+            move_email_with_category(email_file, FOLLOWUP_DIR, category_name)
+            console.print("[yellow]Email moved to review (follow-up folder).[/yellow]\n")
+        elif recommended_action == "DELETE":
+            move_email_with_category(email_file, TRASH_DIR, category_name)
+            console.print("[red]Email moved to trash.[/red]\n")
+        elif recommended_action == "REPLY":
+            send_input = Prompt.ask("Send generated reply? (yes/no)", default="no")
+            if send_input.lower() == "yes":
+                generate_draft_reply(email_file=email_file, view_original=True, view_reply=True, send=True)
+                console.print("[green]Reply sent.[/green]\n")
+            else:
+                console.print("[italic]Reply generation skipped.[/italic]\n")
         return None
+
+    # --- If silent, return a dictionary of results ---
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+        clean_date = f"{dt.month}-{dt.day}-{str(dt.year)[2:]}"
+    except Exception:
+        clean_date = date_str
+
+    return {
+        "email_file": email_file,
+        "sender": sender,
+        "subject": subject,
+        "date_str": date_str,
+        "clean_date": clean_date,
+        "summary": summary_content,
+        "recommended_action": recommended_action,
+        "category": category_name,
+        "action_text": action_text
+    }
 
 def move_email_with_category(email_file, base_dir, category=None):
     """
@@ -203,7 +238,10 @@ def apply_filter_rules(inbox_path=MAIN_INBOX):
     Moves the email based on matching rules.
     """
     rules = load_filter_rules()
-    email_files = [f for f in os.listdir(inbox_path) if os.path.isfile(os.path.join(inbox_path, f))]
+    email_files = [
+        f for f in os.listdir(inbox_path)
+        if os.path.isfile(os.path.join(inbox_path, f))
+    ]
     for email_file in email_files:
         file_path = os.path.join(inbox_path, email_file)
         subject, sender, body, date_str, _ = parse_email(file_path)
@@ -229,7 +267,10 @@ def search_emails(query, inbox_path=MAIN_INBOX):
     Displays matching filenames in a clean format.
     """
     matches = []
-    email_files = [f for f in os.listdir(inbox_path) if os.path.isfile(os.path.join(inbox_path, f))]
+    email_files = [
+        f for f in os.listdir(inbox_path)
+        if os.path.isfile(os.path.join(inbox_path, f))
+    ]
     query_lower = query.lower()
     for email_file in email_files:
         subject, sender, body, date_str, _ = parse_email(os.path.join(inbox_path, email_file))
@@ -299,7 +340,10 @@ def bulk_summarize_and_process(limit=None):
     """
     console.print("[blue]Applying filter rules...[/blue]")
     apply_filter_rules(MAIN_INBOX)
-    remaining_emails = [f for f in os.listdir(MAIN_INBOX) if os.path.isfile(os.path.join(MAIN_INBOX, f))]
+    remaining_emails = [
+        f for f in os.listdir(MAIN_INBOX)
+        if os.path.isfile(os.path.join(MAIN_INBOX, f))
+    ]
     if not remaining_emails:
         console.print("[yellow]No emails left in inbox after filter rules.[/yellow]")
         return
@@ -316,12 +360,15 @@ def bulk_summarize_and_process(limit=None):
 def bulk_summarize_and_process_silent(num_emails=None):
     """
     Processes emails silently in MAIN_INBOX.
-    Collects GPT responses and shows a clean summary table.
-    Prompts the user to execute recommended actions.
+    Collects GPT responses and shows a summary table of recommended actions.
+    Prompts the user to execute those actions.
     """
     console.print("[blue]Applying filter rules...[/blue]")
     apply_filter_rules(MAIN_INBOX)
-    remaining_emails = [f for f in os.listdir(MAIN_INBOX) if os.path.isfile(os.path.join(MAIN_INBOX, f))]
+    remaining_emails = [
+        f for f in os.listdir(MAIN_INBOX)
+        if os.path.isfile(os.path.join(MAIN_INBOX, f))
+    ]
     if not remaining_emails:
         console.print("[yellow]No emails left in inbox after filter rules.[/yellow]")
         return
@@ -343,10 +390,17 @@ def bulk_summarize_and_process_silent(num_emails=None):
     table.add_column("Subject", style="magenta")
     table.add_column("Date", style="green")
     table.add_column("Action", style="yellow")
+
     for idx, res in enumerate(results, start=1):
         action = res["recommended_action"]
         action_display = action if action != "REVIEW" else "REVIEW (manual review)"
-        table.add_row(str(idx), res["sender"], res["subject"], res.get("clean_date", res["date_str"]), action_display)
+        table.add_row(
+            str(idx),
+            res["sender"],
+            res["subject"],
+            res.get("clean_date", res["date_str"]),
+            action_display
+        )
     console.print(table)
 
     if Confirm.ask("\nExecute all recommended actions?"):
