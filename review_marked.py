@@ -9,6 +9,7 @@ from config import FOLLOWUP_DIR, ARCHIVE_DIR, IMPORTANT_DIR
 from draft_reply import generate_draft_reply
 
 console = Console()
+table = Table()
 
 def review_marked_emails():
     """
