@@ -1,4 +1,5 @@
-
+# summarize.py
+import re
 import os
 import shutil
 import json
@@ -65,77 +66,74 @@ def list_emails_for_summary(inbox_path=MAIN_INBOX):
     console.print(table)
     return email_info
 
+
+onsole = Console()
+
 def summarize_specific_email(email_file=None, silent=False):
     """
-    Summarizes a specific email and then (optionally) executes an action.
-    In silent mode, returns a dict of details so the caller
-    can handle the action instead of executing it directly.
+    Summarizes a specific email, requests a more detailed summary from GPT,
+    then requests a short reason plus final line "ACTION: X" from GPT,
+    and robustly parses that action. Executes action if not silent.
     """
-    inbox_path = MAIN_INBOX
+    import os
 
-    # --- Identify email ---
-    if not email_file:
-        email_info = list_emails_for_summary(inbox_path)
-        if not email_info:
-            return
-        user_input = Prompt.ask(
-            "\nEnter the number of the email to summarize (or press Enter to search)",
-            default=""
-        )
-        if user_input == "":
-            email_file = fuzzy_select_email(email_info)
-            if not email_file:
-                console.print("[yellow]No email selected via fuzzy search.[/yellow]")
-                return
-        else:
-            try:
-                selection = int(user_input) - 1
-                if 0 <= selection < len(email_info):
-                    email_file = email_info[selection][3]
-                else:
-                    console.print("[red]Invalid number. Please choose a valid email number.[/red]")
-                    return
-            except ValueError:
-                console.print("[red]Invalid input. Please enter a number or press Enter for fuzzy search.[/red]")
-                return
-
-    file_path = os.path.join(inbox_path, email_file)
+    file_path = os.path.join(MAIN_INBOX, email_file)
     if not os.path.exists(file_path):
-        console.print(f"[red]Error: File '{email_file}' not found in {inbox_path}.[/red]")
+        console.print(f"[red]Error: File '{email_file}' not found in {MAIN_INBOX}.[/red]")
         return None
 
     subject, sender, body, date_str, _ = parse_email(file_path)
 
-    # --- Generate email summary ---
+    # --- 1) More detailed summary prompt ---
     summary_prompt = (
-        "You are an email assistant. Summarize the following email in under 50 words."
-        f"\nFrom: {sender}\nSubject: {subject}\nDate: {date_str}\n{body}\n"
+        "You are an email assistant. Please provide a concise yet detailed summary "
+        "of the following email. Include any requests, deadlines, or important context. "
+        "Limit your summary to about 75 words.\n\n"
+        "Email details:\n"
+        f"From: {sender}\n"
+        f"Subject: {subject}\n"
+        f"Date: {date_str}\n\n"
+        f"{body}\n\n"
+        "If there are any actions, tasks, or urgent items mentioned, please highlight them."
     )
+
     console.print(f"[blue]\nGenerating summary for:[/blue] [yellow]{subject}[/yellow] from [cyan]{sender}[/cyan]")
     summary_response = ask_gpt(summary_prompt)
-    # Parse the response text from LocalAI (JSON string) to a dict.
+    # If you're using LocalAI or a similar tool that returns JSON in "text", parse it:
     raw_summary = summary_response.get("text", "")
     summary_content = ""
     if raw_summary:
         try:
             parsed_summary = json.loads(raw_summary)
-            summary_content = parsed_summary.get("choices", [{}])[0].get("message", {}).get("content", "")
+            summary_content = (
+                parsed_summary.get("choices", [{}])[0]
+                             .get("message", {})
+                             .get("content", "")
+            )
         except json.JSONDecodeError:
-            console.print("[red]Failed to parse JSON from LocalAI summary response.[/red]")
+            console.print("[red]Failed to parse JSON from summary response.[/red]")
+
     console.print(f"[bold magenta]Summary:[/bold magenta] {summary_content}")
 
-    # --- Generate action recommendation ---
+    # --- 2) Revised action prompt (short reason + final "ACTION: X") ---
     action_prompt = (
-        "Read the following email summary.\n"
-        "Based on the summary, which of the 4 options should be executed for this email?\n"
-        "Choose DELETE if the email is not important.\n"
-        "Choose REPLY if the email requires a reply.\n"
-        "Choose REVIEW if the email should be reviewed but doesn't need a reply.\n"
-        "Choose ARCHIVE if the email should be archived or if unsure.\n"
-        f"\nEmail Summary: {summary_content}\n"
-        "\nRespond with only 2 words formatted like:\n"
-        "ACTION: ARCHIVE\nACTION: DELETE\nACTION: REPLY\nACTION: REVIEW\n"
+        "You are a specialized email triage assistant. Read the following email summary carefully.\n\n"
+        "Decide which of the following 4 options best applies:\n"
+        "1) DELETE — if this email has no importance, is spam, or can be safely ignored.\n"
+        "2) REPLY — if this email requires a direct response or follow-up.\n"
+        "3) REVIEW — if the email needs attention or reading but doesn't need a reply.\n"
+        "4) ARCHIVE — if the email should simply be stored (e.g., informational content, no action needed).\n\n"
+        "Summary:\n"
+        f"{summary_content}\n\n"
+        "Provide a short reason (1–2 sentences) in plain text for your choice, "
+        "then a final line with EXACTLY 2 words, like:\n"
+        "ACTION: REPLY\n\n"
+        "Example:\n"
+        "Because the email requests an urgent update on a project, it requires a response.\n"
+        "ACTION: REPLY\n\n"
+        "Now please respond similarly, following the same format."
     )
+
     console.print("[blue]Determining recommended action...[/blue]")
     action_response = ask_gpt(action_prompt)
     raw_action = action_response.get("text", "")
@@ -143,34 +141,37 @@ def summarize_specific_email(email_file=None, silent=False):
     if raw_action:
         try:
             parsed_action = json.loads(raw_action)
-            action_text = parsed_action.get("choices", [{}])[0].get("message", {}).get("content", "")
+            action_text = (
+                parsed_action.get("choices", [{}])[0]
+                            .get("message", {})
+                            .get("content", "")
+            )
         except json.JSONDecodeError:
-            console.print("[red]Failed to parse JSON from LocalAI action response.[/red]")
+            console.print("[red]Failed to parse JSON from action response.[/red]")
 
-    # --- Extract RULE/CATEGORY lines ---
+    # --- 3) Robustly parse RULE, CATEGORY, and final "ACTION: X" ---
     category_name = None
-    for line in action_text.splitlines():
-        line_stripped = line.strip()
-        if line_stripped.startswith("RULE:"):
-            record_filter_rule(line_stripped)
-        elif line_stripped.startswith("CATEGORY:"):
-            parts = line_stripped.split("CATEGORY:", 1)
-            if len(parts) == 2:
-                category_name = parts[1].strip()
+    # If you want to record rules:
+    if record_filter_rule is not None:
+        for line in action_text.splitlines():
+            line_stripped = line.strip()
+            if line_stripped.startswith("RULE:"):
+                record_filter_rule(line_stripped)
+            elif line_stripped.startswith("CATEGORY:"):
+                parts = line_stripped.split("CATEGORY:", 1)
+                if len(parts) == 2:
+                    category_name = parts[1].strip()
 
-    # --- Determine recommended action ---
-    if "ACTION: ARCHIVE" in action_text:
-        recommended_action = "ARCHIVE"
-    elif "ACTION: REVIEW" in action_text:
-        recommended_action = "REVIEW"
-    elif "ACTION: DELETE" in action_text:
-        recommended_action = "DELETE"
-    elif "ACTION: REPLY" in action_text:
-        recommended_action = "REPLY"
+    # We'll look for a line with "ACTION: ARCHIVE/DELETE/REPLY/REVIEW"
+    # A robust approach is a regex search:
+    pattern = r"ACTION:\s*(ARCHIVE|DELETE|REPLY|REVIEW)"
+    match = re.search(pattern, action_text, re.IGNORECASE)
+    if match:
+        recommended_action = match.group(1).upper()  # e.g. "ARCHIVE", "DELETE", "REPLY", "REVIEW"
     else:
         recommended_action = "NONE"
 
-    # --- If interactive, execute action immediately ---
+    # --- 4) If not silent, execute recommended action immediately ---
     if not silent:
         console.print(f"[bold green]Recommended Action:[/bold green] {recommended_action}")
         console.print("\n[bold underline]Email Summary[/bold underline]")
@@ -196,9 +197,12 @@ def summarize_specific_email(email_file=None, silent=False):
                 console.print("[green]Reply sent.[/green]\n")
             else:
                 console.print("[italic]Reply generation skipped.[/italic]\n")
+        else:
+            console.print("[italic]No specific action taken.[/italic]\n")
+
         return None
 
-    # --- If silent, return a dictionary of results ---
+    # --- 5) Otherwise, return data for silent/bulk flow ---
     try:
         dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
         clean_date = f"{dt.month}-{dt.day}-{str(dt.year)[2:]}"
