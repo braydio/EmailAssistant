@@ -1,15 +1,17 @@
-# review_marked.py v1.0.0
+# review_marked.py v1.1.0
 import os
 import shutil
+from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt
+from rich.text import Text
 from utils import parse_email
 from config import FOLLOWUP_DIR, ARCHIVE_DIR, IMPORTANT_DIR
 from draft_reply import generate_draft_reply
 
 console = Console()
-table = Table()
+table = Table
 
 def review_marked_emails():
     """
@@ -21,7 +23,8 @@ def review_marked_emails():
       3. Archive the email (move to ARCHIVE_DIR)
       4. Skip (take no action)
     """
-    email_files = [f for f in os.listdir(FOLLOWUP_DIR) if os.path.isfile(os.path.join(FOLLOWUP_DIR, f))]
+    email_files = [f for f in os.listdir(FOLLOWUP_DIR)
+                   if os.path.isfile(os.path.join(FOLLOWUP_DIR, f))]
     if not email_files:
         console.print("[yellow]No emails found in the review folder.[/yellow]")
         return
@@ -30,14 +33,14 @@ def review_marked_emails():
         file_path = os.path.join(FOLLOWUP_DIR, email_file)
         subject, sender, body, date_str, _ = parse_email(file_path)
         
-        # Display email details in a table
+        # Build table with markup-safe cells
         table = Table(title=f"Email: {email_file}", show_lines=True)
         table.add_column("Field", style="bold")
         table.add_column("Value", style="cyan")
-        table.add_row("From", sender)
-        table.add_row("Subject", subject)
-        table.add_row("Date", date_str)
-        table.add_row("Body", body)
+        table.add_row("From", Text(sender, overflow="fold", no_wrap=False))
+        table.add_row("Subject", Text(subject, overflow="fold", no_wrap=False))
+        table.add_row("Date", Text(date_str, overflow="fold", no_wrap=False))
+        table.add_row("Body", Text(body, overflow="fold", no_wrap=False))
         console.print(table)
         
         console.print("Select an action for this email:")
@@ -48,7 +51,12 @@ def review_marked_emails():
         
         action_choice = Prompt.ask("Enter your choice (1-4)", default="4").strip()
         if action_choice == "1":
-            generate_draft_reply(email_file=email_file, view_original=True, view_reply=True, send=True)
+            generate_draft_reply(
+                email_file=email_file,
+                view_original=True,
+                view_reply=True,
+                send=True
+            )
         elif action_choice == "2":
             try:
                 os.remove(file_path)
@@ -66,6 +74,7 @@ def review_marked_emails():
         else:
             console.print("[italic]Skipping email.[/italic]")
 
+
 def review_important_emails():
     """
     Reviews emails in the Important mailbox.
@@ -75,7 +84,8 @@ def review_important_emails():
       3. Archive the email (move to ARCHIVE_DIR)
       4. Skip (take no action)
     """
-    email_files = [f for f in os.listdir(IMPORTANT_DIR) if os.path.isfile(os.path.join(IMPORTANT_DIR, f))]
+    email_files = [f for f in os.listdir(IMPORTANT_DIR)
+                   if os.path.isfile(os.path.join(IMPORTANT_DIR, f))]
     if not email_files:
         console.print("[yellow]No emails found in the Important mailbox.[/yellow]")
         return
@@ -87,10 +97,10 @@ def review_important_emails():
         table = Table(title=f"Important Email: {email_file}", show_lines=True)
         table.add_column("Field", style="bold")
         table.add_column("Value", style="cyan")
-        table.add_row("From", sender)
-        table.add_row("Subject", subject)
-        table.add_row("Date", date_str)
-        table.add_row("Body", body)
+        table.add_row("From", Text(sender, overflow="fold", no_wrap=False))
+        table.add_row("Subject", Text(subject, overflow="fold", no_wrap=False))
+        table.add_row("Date", Text(date_str, overflow="fold", no_wrap=False))
+        table.add_row("Body", Text(body, overflow="fold", no_wrap=False))
         console.print(table)
         
         console.print("Select an action for this email:")
@@ -101,7 +111,12 @@ def review_important_emails():
         
         action_choice = Prompt.ask("Enter your choice (1-4)", default="4").strip()
         if action_choice == "1":
-            generate_draft_reply(email_file=email_file, view_original=True, view_reply=True, send=True)
+            generate_draft_reply(
+                email_file=email_file,
+                view_original=True,
+                view_reply=True,
+                send=True
+            )
         elif action_choice == "2":
             try:
                 os.remove(file_path)
@@ -119,6 +134,8 @@ def review_important_emails():
         else:
             console.print("[italic]Skipping email.[/italic]")
 
+if __name__ == "__main__":
+    review_marked_emails()
 if __name__ == "__main__":
     review_marked_emails()
 
