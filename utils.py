@@ -59,7 +59,7 @@ def parse_email(file_path):
 def send_notification(subject, sender, recommendation):
     try:
         notification_msg = f"{subject} | Action: {recommendation}"
-        subprocess.run(["notify-send", "Email Action Recommended", notification_msg])
+        subprocess.run(["notify-send", "Email Action Recommended", notification_msg, "-t 1000"])
         console.print(f"[green]Notification sent:[/green] {notification_msg}")
     except Exception as e:
         console.print(f"[red]Notification failed:[/red] {e}")
