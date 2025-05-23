@@ -1,29 +1,43 @@
-
-# utils.py
-from bs4 import BeautifulSoup
+import os
 import re
 import logging
+import json
+import subprocess
+import imaplib
+from bs4 import BeautifulSoup
 from email import message_from_file
 from email.policy import default
-import subprocess
-import json
+from config import IMAP_HOST, IMAP_USER, IMAP_PASS
 from rich.console import Console
 
 console = Console()
+RULES_FILE = "filter_rules.json"
+
 
 def format_email_body(body):
     if "<html" in body.lower():
         soup = BeautifulSoup(body, "html.parser")
         body = soup.get_text(separator="\n")
-    body = re.sub(r'(>.*\n)+', '', body)
-    body = re.sub(r'http[s]?://\S+', '', body)
-    body = re.sub(r'(?i)(view in browser|unsubscribe|privacy policy|manage preferences|click here|trouble viewing).*$', '', body, flags=re.MULTILINE)
-    body = re.sub(r'(?i)(cheers|best regards|sent from my|disclaimer).*$', '', body, flags=re.MULTILINE)
-    body = re.sub(r'\n+', '\n', body).strip()
+    body = re.sub(r"(>.*\n)+", "", body)
+    body = re.sub(r"http[s]?://\S+", "", body)
+    body = re.sub(
+        r"(?i)(view in browser|unsubscribe|privacy policy|manage preferences|click here|trouble viewing).*$",
+        "",
+        body,
+        flags=re.MULTILINE,
+    )
+    body = re.sub(
+        r"(?i)(cheers|best regards|sent from my|disclaimer).*$",
+        "",
+        body,
+        flags=re.MULTILINE,
+    )
+    body = re.sub(r"\n+", "\n", body).strip()
     max_length = 1000
     if len(body) > max_length:
         body = body[:max_length] + "\n[Content Truncated...]"
     return body
+
 
 def parse_email(file_path):
     try:
@@ -45,6 +59,7 @@ def parse_email(file_path):
             formatted_body = format_email_body(body)
             date_str = msg.get("Date", "Unknown Date")
             from email.utils import parsedate_to_datetime
+
             try:
                 date_obj = parsedate_to_datetime(date_str)
                 formatted_date = date_obj.strftime("%Y-%m-%d %H:%M:%S")
@@ -56,10 +71,14 @@ def parse_email(file_path):
         logging.error(f"Error parsing email {file_path}: {e}")
         return "Error", "Error", "", "Unknown Date", None
 
+
 def send_notification(subject, sender, recommendation):
     try:
         notification_msg = f"{subject} | Action: {recommendation}"
-        subprocess.run(["notify-send", "Email Action Recommended", notification_msg, "-t 1000"])
+        subprocess.run(
+            ["notify-send", "Email Action Recommended", notification_msg, "-t", "1000"],
+            check=True,
+        )
         console.print(f"[green]Notification sent:[/green] {notification_msg}")
     except Exception as e:
         console.print(f"[red]Notification failed:[/red] {e}")
@@ -68,48 +87,44 @@ def send_notification(subject, sender, recommendation):
 def fuzzy_select_email(email_info):
     lines = []
     for idx, sender, subject, email_file, date_str in email_info:
-        line = f"{idx}. From: {sender} | Subject: {subject} | Date: {date_str} | File: {email_file}"
-        lines.append(line)
+        lines.append(
+            f"{idx}. From: {sender} | Subject: {subject} | Date: {date_str} | File: {email_file}"
+        )
     try:
-        process = subprocess.Popen(["fzf"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        process = subprocess.Popen(
+            ["fzf"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True
+        )
         input_data = "\n".join(lines)
         output, _ = process.communicate(input=input_data)
         if output:
-            parts = output.strip().split(" | ")
-            for part in parts:
+            for part in output.strip().split(" | "):
                 if part.startswith("File: "):
-                    selected_file = part.replace("File: ", "").strip()
-                    return selected_file
+                    return part.replace("File: ", "").strip()
     except Exception as e:
-        print(f"Fuzzy selection failed: {e}")
+        console.print(f"[red]Fuzzy selection failed:[/red] {e}")
     return None
 
-def record_filter_rule(rule, file_path="filter_rules.txt"):
-    try:
-        with open(file_path, "a", encoding="utf-8") as f:
-            f.write(rule + "\n")
-        print("Filter rule recorded:", rule)
-    except Exception as e:
-        logging.error(f"Error recording filter rule: {e}")
 
-def load_filter_rules(file_path="filter_rules.txt"):
-    rules = []
+def load_filter_rules():
+    """Load all filter rules from a JSON array in RULES_FILE."""
+    if not os.path.exists(RULES_FILE):
+        return []
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    try:
-                        rule = json.loads(line)
-                        rules.append(rule)
-                    except json.JSONDecodeError:
-                        parts = line.split(":")
-                        if len(parts) >= 3:
-                            rule = {"field": parts[0].strip(), "pattern": parts[1].strip(), "action": parts[2].strip().upper()}
-                            rules.append(rule)
-    except FileNotFoundError:
-        print("Filter rules file not found. No filter rules loaded.")
-    return rules
+        with open(RULES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        console.print(f"[red]Error parsing {RULES_FILE}: {e}[/red]")
+        return []
+
+
+def record_filter_rule(rule_dict):
+    """Append a rule dict into RULES_FILE JSON array."""
+    rules = load_filter_rules()
+    rules.append(rule_dict)
+    with open(RULES_FILE, "w", encoding="utf-8") as f:
+        json.dump(rules, f, indent=2)
+    console.print(f"[green]Wrote new rule to {RULES_FILE}[/green]")
+
 
 def matches_filter_rule(email_text, rule):
     pattern = rule.get("pattern")
@@ -118,3 +133,39 @@ def matches_filter_rule(email_text, rule):
         return action.upper()
     return None
 
+
+def move_message_to_trash_via_imap(file_path):
+    """
+    Moves the message corresponding to file_path to Gmail [Gmail]/Trash via IMAP,
+    marks it Deleted, and expunges.
+    """
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            msg = message_from_file(f, policy=default)
+            msg_id = msg.get("Message-ID")
+        if not msg_id:
+            console.print(
+                "[red]No Message-ID header found; cannot delete via IMAP.[/red]"
+            )
+            return False
+
+        M = imaplib.IMAP4_SSL(IMAP_HOST)
+        M.login(IMAP_USER, IMAP_PASS)
+        M.select("INBOX")
+
+        typ, data = M.search(None, "HEADER", "Message-ID", msg_id)
+        if typ != "OK" or not data or not data[0]:
+            console.print(f"[red]IMAP search failed for Message-ID {msg_id}[/red]")
+            M.logout()
+            return False
+
+        for num in data[0].split():
+            M.copy(num, "[Gmail]/Trash")
+            M.store(num, "+FLAGS", "\\Deleted")
+        M.expunge()
+        M.logout()
+        console.print(f"[green]Message {msg_id} moved to Trash via IMAP.[/green]")
+        return True
+    except Exception as e:
+        console.print(f"[red]IMAP delete failed for {file_path}: {e}[/red]")
+        return False
