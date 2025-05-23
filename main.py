@@ -1,4 +1,3 @@
-
 import json
 import os
 from rich import print
@@ -6,12 +5,12 @@ from rich.table import Table
 from rich.console import Console
 from config import MAIN_INBOX, ARCHIVE_DIR, FOLLOWUP_DIR, TRASH_DIR, IMPORTANT_DIR
 from summarize import (
-    summarize_all_unread_emails, 
+    summarize_all_unread_emails,
     summarize_specific_email,  # new two-step process function
     bulk_summarize_and_process_silent,
-    apply_filter_rules, 
+    apply_filter_rules,
     reply_to_email,
-    search_emails
+    search_emails,
 )
 from manual_review import manual_review_process
 from draft_reply import generate_draft_reply
@@ -21,8 +20,12 @@ import review_marked
 
 console = Console()
 
+
 def count_emails(directory):
-    return len([f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))])
+    return len(
+        [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+    )
+
 
 def get_email_status():
     return {
@@ -32,6 +35,7 @@ def get_email_status():
         "󰇯 Review": count_emails(FOLLOWUP_DIR),
         "󰗩 Trash": count_emails(TRASH_DIR),
     }
+
 
 def print_email_status():
     status = get_email_status()
@@ -48,16 +52,25 @@ def print_email_status():
 
     console.print(table)
 
+
 def clear_archive():
     """
     Clears all emails in the archive folder.
     """
-    email_files = [f for f in os.listdir(ARCHIVE_DIR) if os.path.isfile(os.path.join(ARCHIVE_DIR, f))]
+    email_files = [
+        f
+        for f in os.listdir(ARCHIVE_DIR)
+        if os.path.isfile(os.path.join(ARCHIVE_DIR, f))
+    ]
     if not email_files:
         console.print("[yellow]Archive folder is already empty.[/yellow]")
         return
 
-    confirm = input("Are you sure you want to clear the Archive folder? (yes/no): ").strip().lower()
+    confirm = (
+        input("Are you sure you want to clear the Archive folder? (yes/no): ")
+        .strip()
+        .lower()
+    )
     if confirm == "yes":
         for email_file in email_files:
             file_path = os.path.join(ARCHIVE_DIR, email_file)
@@ -69,6 +82,7 @@ def clear_archive():
         console.print("[green]Archive folder cleared.[/green]")
     else:
         console.print("[yellow]Clear archive cancelled.[/yellow]")
+
 
 def print_menu():
     table = Table(title="📌 Email Assistant Menu", style="bold green")
@@ -88,13 +102,15 @@ def print_menu():
         "10": "Manual Review Process (with Embedding)",
         "11": "Clear Archive Box",
         "12": "Review Important Emails",
-        "0": "[bold red]Exit[/bold red]"
+        "13": "Run silent GPT summary & auto-apply (no confirm)",  # <- NEW OPTION
+        "0": "[bold red]Exit[/bold red]",
     }
 
     for key, value in menu_options.items():
         table.add_row(key, value)
 
     console.print(table)
+
 
 def main():
     console.print("[bold cyan]Welcome to the Email Assistant![/bold cyan]")
@@ -108,18 +124,24 @@ def main():
             # Uses the new two-step summarization (summary then action) for all unread emails.
             summarize_all_unread_emails()
         elif choice == "2":
-            num = input("Enter number of emails to process silently (or press Enter for all): ").strip()
+            num = input(
+                "Enter number of emails to process silently (or press Enter for all): "
+            ).strip()
             num_emails = int(num) if num.isdigit() else None
             bulk_summarize_and_process_silent(num_emails)
         elif choice == "3":
             reply_to_email()
         elif choice == "4":
-            console.print("\n[bold yellow]Generating and sending draft reply...[/bold yellow]")
+            console.print(
+                "\n[bold yellow]Generating and sending draft reply...[/bold yellow]"
+            )
             generate_draft_reply(send=True)
         elif choice == "5":
             review_marked.review_marked_emails()
         elif choice == "6":
-            keyword = input("Enter keyword or date (YYYY-MM-DD) / range (YYYY-MM-DD to YYYY-MM-DD): ").strip()
+            keyword = input(
+                "Enter keyword or date (YYYY-MM-DD) / range (YYYY-MM-DD to YYYY-MM-DD): "
+            ).strip()
             search_emails(keyword)
         elif choice == "7":
             apply_filter_rules(MAIN_INBOX)
@@ -139,6 +161,11 @@ def main():
             clear_archive()
         elif choice == "12":
             review_marked.review_important_emails()
+        elif choice == "13":
+            console.print(
+                "[bold yellow]Running silent mode — no confirmation, all actions will be applied.[/bold yellow]"
+            )
+            bulk_summarize_and_process_silent(num_emails=200, confirm_all=True)
         elif choice == "0":
             console.print("[bold red]Goodbye! [/bold red]")
             break
@@ -147,6 +174,6 @@ def main():
 
         print_email_status()
 
+
 if __name__ == "__main__":
     main()
-
