@@ -1,4 +1,3 @@
-
 # gpt_api.py
 import openai
 import os
@@ -25,11 +24,14 @@ password = os.getenv("WEBUI_PSWD")
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 if not openai.api_key and not USE_LOCAL_LLM:
-    raise ValueError("OPENAI_API_KEY environment variable not set or failed to load from .env.")
+    raise ValueError(
+        "OPENAI_API_KEY environment variable not set or failed to load from .env."
+    )
 
 gpt_request_log_path = os.path.join(project_dir, "gpt_requests.log")
 TIMESTAMP = datetime.now()
 WORKSPACE_SLUG = "emailgpt"
+
 
 def count_tokens(prompt, model="gpt-4o-mini"):
     try:
@@ -38,7 +40,10 @@ def count_tokens(prompt, model="gpt-4o-mini"):
         encoding = tiktoken.get_encoding("cl100k_base")
     return len(encoding.encode(prompt))
 
-def log_gpt_request(prompt, api_response, token_count, log_file_path="gpt_requests.log"):
+
+def log_gpt_request(
+    prompt, api_response, token_count, log_file_path="gpt_requests.log"
+):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     model_used = api_response.get("model", "Unknown Model")
     total_tokens = api_response.get("usage", {}).get("total_tokens", "Unknown")
@@ -66,10 +71,7 @@ def log_gpt_request(prompt, api_response, token_count, log_file_path="gpt_reques
 def call_local_embedding(text):
     try:
         url = f"{LOCAL_AI_BASE_URL}/v1/embeddings"
-        payload = {
-            "model": "nomic-embed-text-v1.5",
-            "input": text
-        }
+        payload = {"model": "nomic-embed-text-v1.5", "input": text}
         response = requests.post(url, json=payload)
         response.raise_for_status()
         return response.json()
@@ -78,23 +80,21 @@ def call_local_embedding(text):
         return {"error": str(e)}
 
 
-def call_local_llm(prompt, model="Qwen2.5-Coder-7B-Instruct"):
+def call_local_llm(prompt, model="mistral"):
     try:
         url = f"{LOCAL_AI_BASE_URL}/v1/chat/completions"
-        console.print(f"[blue]LocalAI Request:[/blue] [cyan]{prompt[:100]}...[/cyan]")
+        console.print(f"[blue]Sending to URL LocalAI at: {url}\n Message: {prompt}[/blue]")
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 1000,
-            "temperature": 0.2
+            "temperature": 0.2,
         }
         response = requests.post(url, json=payload)
         response.raise_for_status()
-        result = response.json()
-        console.print("[green]LocalAI Response received.[/green]")
-        return result
+        return response.json()
     except Exception as e:
-        console.print(f"[red]LocalAI call failed:[/red] {e}")
+        logging.error(f"Local LLM call failed: {e}")
         return {"error": str(e)}
 
 
@@ -106,20 +106,31 @@ def format_api_response(api_response):
     """
     try:
         if isinstance(api_response, dict):
-            if "text" in api_response:
-                return {"text": api_response["text"].strip(), "sources": [], "close": False}
+            if "choices" in api_response and "message" in api_response["choices"][0]:
+                return {
+                    "text": api_response["choices"][0]["message"]["content"].strip(),
+                    "sources": [],
+                    "close": False
+                }
             if "textResponse" in api_response:
-                return {"text": api_response["textResponse"].strip(), "sources": [], "close": False}
+                return {
+                    "text": api_response["textResponse"].strip(),
+                    "sources": [],
+                    "close": False,
+                }
         return {"text": json.dumps(api_response), "sources": [], "close": False}
     except Exception as e:
         logging.error(f"Error formatting API response: {e}")
         return {"text": None, "sources": [], "close": False, "error": str(e)}
 
-def ask_gpt(prompt, model="gpt-4"): # Qwen2.5-Coder-7B-Instruct
+
+def ask_gpt(prompt, model=""):  # Qwen2.5-Coder-7B-Instruct
     token_count = count_tokens(prompt, model=model)
     if USE_LOCAL_LLM:
         try:
-            console.print(f"[bold green]Calling LocalAI at {LOCAL_AI_BASE_URL}[/bold green]")
+            console.print(
+                f"[bold green]Calling {model} at {LOCAL_AI_BASE_URL}[/bold green]"
+            )
             api_response = call_local_llm(prompt, model=model)
             formatted_response = format_api_response(api_response)
             log_gpt_request(prompt, api_response, token_count)
@@ -129,18 +140,31 @@ def ask_gpt(prompt, model="gpt-4"): # Qwen2.5-Coder-7B-Instruct
             return None
     else:
         if not openai.api_key:
-            raise RuntimeError("OpenAI API key is not set. Please check .env and environment variables.")
+            raise RuntimeError(
+                "OpenAI API key is not set. Please check .env and environment variables."
+            )
         try:
             api_response = openai.ChatCompletion.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}]
+                model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}]
             )
-            text = api_response['choices'][0]['message']['content']
+            text = api_response["choices"][0]["message"]["content"]
             log_gpt_request(prompt, api_response, token_count)
             return format_api_response(text)
         except Exception as e:
             logging.error(f"Error during GPT API call: {e}")
             return None
+
+
+def get_active_model():
+    try:
+        url = f"{LOCAL_AI_BASE_URL}/v1/internal/model/info"
+        response = requests.get(url, timeout=3)
+        response.raise_for_status()
+        return response.json().get("model_name", "mistral")
+    except Exception as e:
+        logging.warning(f"Could not get active model: {e}")
+        return "Unknown"
+
 
 def display_summary_report(response):
     """
@@ -167,6 +191,7 @@ def display_summary_report(response):
     else:
         console.print("[italic]No sources available.[/italic]")
 
+
 def interactive_acceptance(response):
     """
     Allows the user to interactively accept all results or select specific entries.
@@ -186,16 +211,24 @@ def interactive_acceptance(response):
         console.print("\n[bold]Review the following sources:[/bold]")
         for i, source in enumerate(sources, start=1):
             console.print(f"{i}. {source}")
-        choice = console.input("\nAccept all sources? (Y/n) or type numbers separated by comma: ").strip()
+        choice = console.input(
+            "\nAccept all sources? (Y/n) or type numbers separated by comma: "
+        ).strip()
         if choice.lower() in ["y", "yes", ""]:
             accepted_results = sources
         else:
             # Process specific numbers input
             try:
-                indices = [int(x.strip()) for x in choice.split(",") if x.strip().isdigit()]
-                accepted_results = [sources[i-1] for i in indices if 0 < i <= len(sources)]
+                indices = [
+                    int(x.strip()) for x in choice.split(",") if x.strip().isdigit()
+                ]
+                accepted_results = [
+                    sources[i - 1] for i in indices if 0 < i <= len(sources)
+                ]
             except Exception as e:
-                console.print(f"[red]Invalid input. No sources accepted due to error: {e}[/red]")
+                console.print(
+                    f"[red]Invalid input. No sources accepted due to error: {e}[/red]"
+                )
     else:
         console.print("[italic]No additional sources to review.[/italic]")
 
@@ -205,15 +238,7 @@ def interactive_acceptance(response):
     console.print(json.dumps(accepted, indent=2))
     return accepted
 
+
 # Example usage:
 if __name__ == "__main__":
-    # Sample prompt for testing; replace with your dynamic prompt as needed.
-    sample_prompt = "Give a brief overview of the current trends in electronic music."
-    response = ask_gpt(sample_prompt)
-    if response:
-        display_summary_report(response)
-        # Interactive acceptance step
-        accepted = interactive_acceptance(response)
-    else:
-        console.print("[red]Failed to retrieve GPT response.[/red]")
-
+    main()
