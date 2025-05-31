@@ -136,18 +136,17 @@ def matches_filter_rule(email_text, rule):
 
 def move_message_to_trash_via_imap(file_path):
     """
-    Moves the message corresponding to file_path to Gmail [Gmail]/Trash via IMAP,
-    marks it Deleted, and expunges.
+    Attempts IMAP-based deletion. Falls back to local trash if it fails.
     """
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             msg = message_from_file(f, policy=default)
             msg_id = msg.get("Message-ID")
+
         if not msg_id:
-            console.print(
-                "[red]No Message-ID header found; cannot delete via IMAP.[/red]"
-            )
-            return False
+            raise ValueError("Missing Message-ID header")
+
+        assert IMAP_USER and IMAP_PASS, "Missing IMAP credentials"
 
         M = imaplib.IMAP4_SSL(IMAP_HOST)
         M.login(IMAP_USER, IMAP_PASS)
@@ -155,9 +154,7 @@ def move_message_to_trash_via_imap(file_path):
 
         typ, data = M.search(None, "HEADER", "Message-ID", msg_id)
         if typ != "OK" or not data or not data[0]:
-            console.print(f"[red]IMAP search failed for Message-ID {msg_id}[/red]")
-            M.logout()
-            return False
+            raise ValueError("Message not found via IMAP")
 
         for num in data[0].split():
             M.copy(num, "[Gmail]/Trash")
@@ -167,5 +164,16 @@ def move_message_to_trash_via_imap(file_path):
         console.print(f"[green]Message {msg_id} moved to Trash via IMAP.[/green]")
         return True
     except Exception as e:
-        console.print(f"[red]IMAP delete failed for {file_path}: {e}[/red]")
+        # Fallback to local trash move
+        from config import TRASH_DIR
+
+        try:
+            os.makedirs(os.path.join(TRASH_DIR, "cur"), exist_ok=True)
+            fallback_dest = os.path.join(TRASH_DIR, "cur", os.path.basename(file_path))
+            os.rename(file_path, fallback_dest)
+            console.print(
+                f"[yellow]IMAP failed, moved locally to trash: {file_path}[/yellow]"
+            )
+        except Exception as e2:
+            console.print(f"[red]Failed fallback move: {e2}[/red]")
         return False
