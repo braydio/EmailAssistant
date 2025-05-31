@@ -149,16 +149,21 @@ def summarize_specific_email(email_file=None, silent=False):
         elif recommended_action == "DELETE":
             move_to_trash_via_maildir(email_file)
         elif recommended_action == "REPLY":
-            if (
-                Prompt.ask("Send generated reply? (yes/no)", default="no").lower()
-                == "yes"
-            ):
+            if confirm_all:
                 generate_draft_reply(
                     email_file=email_file,
-                    view_original=True,
-                    view_reply=True,
+                    view_original=False,
+                    view_reply=False,
                     send=True,
                 )
+            else:
+                if Confirm.ask("Send reply now?", default=False):
+                    generate_draft_reply(
+                        email_file=email_file,
+                        view_original=True,
+                        view_reply=True,
+                        send=True,
+                    )
 
     try:
         dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
