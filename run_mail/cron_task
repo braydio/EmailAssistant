@@ -1,0 +1,6 @@
+# pull & push mail every 5m
+*/5 * * * * mbsync gmail-main
+*/10 * * * * mbsync -R gmail-important gmail-trash gmail-spam gmail-sent
+
+# run processor at 17:00 Pi time
+0 17 * * * docker run --rm --env-file /path/to/.env -v /home/pi/.mail/Gmail:/home/pi/.mail/Gmail -v /root:/reports your-image
