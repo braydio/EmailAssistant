@@ -8,7 +8,7 @@ import logging
 import tiktoken
 from datetime import datetime
 from dotenv import load_dotenv
-from config import USE_LOCAL_LLM, LOCAL_AI_BASE_URL, ANYTHING_API_URL, ANYTHING_API_KEY
+from config import USE_LOCAL_LLM, LOCAL_AI_BASE_URL
 from rich.console import Console
 
 # Setup rich console for pretty output
@@ -83,7 +83,9 @@ def call_local_embedding(text):
 def call_local_llm(prompt, model="mistral"):
     try:
         url = f"{LOCAL_AI_BASE_URL}/v1/chat/completions"
-        console.print(f"[blue]Sending to URL LocalAI at: {url}\n Message: {prompt}[/blue]")
+        console.print(
+            f"[blue]Sending to URL LocalAI at: {url}\n Message: {prompt}[/blue]"
+        )
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
@@ -110,7 +112,7 @@ def format_api_response(api_response):
                 return {
                     "text": api_response["choices"][0]["message"]["content"].strip(),
                     "sources": [],
-                    "close": False
+                    "close": False,
                 }
             if "textResponse" in api_response:
                 return {

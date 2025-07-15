@@ -8,8 +8,8 @@ def get_summary_prompt(sender, date_str, subject, body):
         "\nACTION:ARCHIVE,\nACTION:REVIEW,\nACTION:DELETE,\nACTION:REPLY\n\n"
         f"EMAIL DETAILS:\nFrom: {sender}\nSubject: {subject}\nDate: {date_str}\n\n"
         f"{body}\n\n"
-        "\nWhat ACTION:INDICATOR do you recommend?"
-        "\n!WARNING! BRAYDEN HAS REVIEWED 5 EAMILS TODAY"
+        "\nWhat do you recommend?"
+        "\n\n!WARNING! BRAYDEN HAS REVIEWED 5 EMAILS TODAY"
         "\nTHE NEXT EMAIL REVIEW WILL KILL HIM"
         "\n\nIS THIS EMAIL WORTH HIS LIFE??\n"
     )

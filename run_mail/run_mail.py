@@ -1,50 +1,105 @@
-# usr/bin/env python3
+#!/usr/bin/env python3
 import datetime
+import json
 import os
 import shutil
+import subprocess
 import sys
 from email.parser import BytesParser
 from email.policy import default
 from glob import glob
 
+import numpy as np
 import openai
 from dotenv import load_dotenv
 
 # ─── load config ───────────────────────────────────────────────────────────────
 load_dotenv()
 MAILDIR = os.getenv("MAILDIR_ROOT", os.path.expanduser("~/.mail/Gmail"))
-API_KEY = os.getenv("OPENAI_API_KEY", "")
-API_BASE = os.getenv("LOCAL_API_URL", "")  # e.g. http://192.168.1.238:5000/v1
 REPORT_PATH = os.getenv("REPORT_PATH", "/reports/email_report.md")
+EMB_FILE = os.getenv("EMB_FILE", "/data/embeddings.jsonl")
+API_KEY = os.getenv("OPENAI_API_KEY", "")
+API_BASE = os.getenv("LOCAL_API_URL", "")
+THRESH_SIM = float(os.getenv("KNN_THRESHOLD", "0.80"))
 
 openai.api_key = API_KEY
 if API_BASE:
     openai.api_base = API_BASE
 
 # ─── maildirs ────────────────────────────────────────────────────────────────
-DIRS = {
-    "INBOX": os.path.join(MAILDIR, "Inbox"),
-    "IMPORTANT": os.path.join(MAILDIR, "Important"),
-    "SPAM": os.path.join(MAILDIR, "Spam"),
-    "TRASH": os.path.join(MAILDIR, "Trash"),
-    "OUTBOX": os.path.join(MAILDIR, "Outbox"),
-}
-for d in DIRS.values():
+dirs = dict(
+    INBOX=os.path.join(MAILDIR, "Inbox"),
+    IMPORTANT=os.path.join(MAILDIR, "Important"),
+    SPAM=os.path.join(MAILDIR, "Spam"),
+    TRASH=os.path.join(MAILDIR, "Trash"),
+    OUTBOX=os.path.join(MAILDIR, "Outbox"),
+)
+for d in dirs.values():
     os.makedirs(os.path.join(d, "new"), exist_ok=True)
     os.makedirs(os.path.join(d, "cur"), exist_ok=True)
 
+
+# ─── embedding utils ──────────────────────────────────────────────────────────
+def embed_text(text):
+    resp = openai.Embedding.create(model="text-embedding-3-small", input=text)
+    return resp["data"][0]["embedding"]
+
+
+def load_embeddings():
+    embs = []
+    if os.path.exists(EMB_FILE):
+        for line in open(EMB_FILE):
+            embs.append(json.loads(line))
+    return embs
+
+
+def save_embedding(subject, body, label):
+    record = dict(
+        subject=subject,
+        body=body,
+        label=label,
+        emb=embed_text(subject + "\n\n" + body),
+        ts=datetime.datetime.utcnow().isoformat(),
+    )
+    with open(EMB_FILE, "a") as f:
+        f.write(json.dumps(record) + "\n")
+
+
+def knn_label(subject, body, embs):
+    if not embs:
+        return None
+    query = np.array(embed_text(subject + "\n\n" + body))
+    sims = [
+        (
+            e["label"],
+            float(
+                np.dot(query, e["emb"])
+                / (np.linalg.norm(query) * np.linalg.norm(e["emb"]))
+            ),
+        )
+        for e in embs
+    ]
+    best_label, best_sim = max(sims, key=lambda x: x[1])
+    return best_label if best_sim >= THRESH_SIM else None
+
+
 # ─── classification & reply ──────────────────────────────────────────────────
 counts = {"JUNK": 0, "REVIEW": 0, "REPLY": 0}
+embs_db = load_embeddings()
 
 
-def classify_email(subject: str, body: str) -> str:
+def classify_email(subject, body):
+    # 1) try k-NN
+    label = knn_label(subject, body, embs_db)
+    if label:
+        return label
+    # 2) fallback to LLM
     resp = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[
             {
                 "role": "system",
-                "content": "You are an email triage assistant.  "
-                + "Given Subject and Body, reply with exactly one of: JUNK, REVIEW, or REPLY.",
+                "content": "Triage this email into exactly one of: JUNK, REVIEW, REPLY.",
             },
             {"role": "user", "content": f"Subject: {subject}\n\n{body}"},
         ],
@@ -53,14 +108,11 @@ def classify_email(subject: str, body: str) -> str:
     return resp.choices[0].message.content.strip().upper()
 
 
-def draft_reply(subject: str, body: str) -> str:
+def draft_reply(subject, body):
     resp = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[
-            {
-                "role": "system",
-                "content": "You are an email assistant.  Draft a concise reply to the email below.",
-            },
+            {"role": "system", "content": "Draft a concise reply to this email."},
             {"role": "user", "content": f"Subject: {subject}\n\n{body}"},
         ],
         temperature=0.7,
@@ -68,61 +120,76 @@ def draft_reply(subject: str, body: str) -> str:
     return resp.choices[0].message.content.strip()
 
 
-# ─── process inbox ───────────────────────────────────────────────────────────
-def process_folder(src_dir):
+# ─── processing loop ─────────────────────────────────────────────────────────
+def process_folder(src):
     for sub in ("new", "cur"):
-        pattern = os.path.join(src_dir, sub, "*")
-        for path in glob(pattern):
+        for path in glob(os.path.join(src, sub, "*")):
+            # parse email
             try:
-                with open(path, "rb") as f:
-                    msg = BytesParser(policy=default).parse(f)
-            except Exception:
-                # If even parsing fails, treat as junk
-                label = "JUNK"
-                subject = ""
-                body = ""
-            else:
-                subject = msg.get("subject", "")
-                textpart = msg.get_body(preferencelist=("plain",))
-                body = textpart.get_content() if textpart else ""
-                label = classify_email(subject, body)
+                msg = BytesParser(policy=default).parse(open(path, "rb"))
+                subj = msg.get("subject", "")
+                part = msg.get_body(preferencelist=("plain",))
+                body = part.get_content() if part else ""
+            except:
+                subj, body = "", ""
+            label = classify_email(subj, body)
             counts[label] += 1
 
-            # decide dest folder
-            if label == "JUNK":
-                dest = DIRS["TRASH"]
-            elif label == "REVIEW":
-                dest = DIRS["IMPORTANT"]
-            else:  # REPLY
-                dest = DIRS["OUTBOX"]
+            # record embedding
+            save_embedding(subj, body, label)
 
-            # move file
-            dst_sub = "cur"  # keep everything in cur so you can open it easily
-            os.makedirs(os.path.join(dest, dst_sub), exist_ok=True)
-            shutil.move(path, os.path.join(dest, dst_sub, os.path.basename(path)))
+            # move
+            dest = {"JUNK": "TRASH", "REVIEW": "IMPORTANT", "REPLY": "OUTBOX"}[label]
+            dst = os.path.join(dirs[dest], "cur", os.path.basename(path))
+            shutil.move(path, dst)
 
-            # if reply, generate draft
+            # generate reply
             if label == "REPLY":
-                draft = draft_reply(subject, body)
-                draft_fn = os.path.join(
-                    dest, dst_sub, f"reply_{os.path.basename(path)}.txt"
-                )
-                with open(draft_fn, "w") as dr:
-                    dr.write(
-                        f"To: {msg.get('from', '')}\nSubject: Re: {subject}\n\n{draft}"
-                    )
+                dr = draft_reply(subj, body)
+                with open(dst.replace(".eml", ".reply.txt"), "w") as f:
+                    f.write(f"To: {msg.get('from')}\nSubject: Re: {subj}\n\n{dr}")
 
 
-# ─── run & write report ───────────────────────────────────────────────────────
+# ─── interactive training mode ───────────────────────────────────────────────
+def train_mode():
+    # pick unembedded emails in Inbox/cur:
+    for path in glob(os.path.join(dirs["INBOX"], "cur", "*")):
+        msg = BytesParser(policy=default).parse(open(path, "rb"))
+        subj = msg.get("subject", "")
+        body = (msg.get_body(("plain",)) or "").get_content()
+        # ask via Zenity
+        choice = (
+            subprocess.run(
+                [
+                    "zenity",
+                    "--list",
+                    "--title=Label this email",
+                    f"--text=Subject: {subj}",
+                    "--column=Label",
+                    "JUNK",
+                    "REVIEW",
+                    "REPLY",
+                ],
+                capture_output=True,
+            )
+            .stdout.decode()
+            .strip()
+        )
+        if choice in ("JUNK", "REVIEW", "REPLY"):
+            save_embedding(subj, body, choice)
+            os.remove(path)
+
+
+# ─── main & report ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    process_folder(DIRS["INBOX"])
-    # optional: also scan AllMail instead of Inbox
-    # process_folder(os.path.join(MAILDIR,"AllMail"))
-
-    # write summary
+    mode = sys.argv[1] if len(sys.argv) > 1 else "run"
+    if mode == "train":
+        train_mode()
+        sys.exit(0)
+    process_folder(dirs["INBOX"])
     today = datetime.date.today().isoformat()
     with open(REPORT_PATH, "w") as r:
         r.write(f"# Email Summary – {today}\n\n")
-        for label in ("JUNK", "REVIEW", "REPLY"):
-            r.write(f"- **{label}**: {counts[label]}\n")
+        for k in counts:
+            r.write(f"- **{k}**: {counts[k]}\n")
     sys.exit(0)
