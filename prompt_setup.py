@@ -1,17 +1,13 @@
 def get_summary_prompt(sender, date_str, subject, body):
     SUMMARY_PROMPT = (
-        "Review this email, give a brief summary, identify any requests, deadlines, or important context.\n"
-        "You DO NOT want Brayden to review an email UNLESS it is *very* important.\n"
-        "This is because Brayden has a dangerous allergy to emails.\n"
-        "If he reviews more than 5 emails in one day, he will DIE!\n\n"
-        "END your response with one of the following actions: \n\n"
-        "\nACTION:ARCHIVE,\nACTION:REVIEW,\nACTION:DELETE,\nACTION:REPLY\n\n"
+        "Assess this email and summarize briefly. Highlight any critical requests, deadlines, or key context.\n"
+        "Brayden is very busy and important, he does not have time to review emails that his other assistants should handle.\n"
+        "ENSURE that ONLY IMPORTANT emails are marked for REVIEW. ENSURE that ALL IMPORTANT emails are marked for REVIEW.\n\n"
+        "Choose one final action: \n\n"
+        "ACTION:ARCHIVE (If you cannot decide, DEFAULT is ACTION:ARCHIVE),\nACTION:REVIEW (Is this email really that important?),\nACTION:DELETE (delete marketing, frequent announcement's of little import etc.),\nACTION:REPLY\n\n"
         f"EMAIL DETAILS:\nFrom: {sender}\nSubject: {subject}\nDate: {date_str}\n\n"
         f"{body}\n\n"
         "\nWhat do you recommend?"
-        "\n\n!WARNING! BRAYDEN HAS REVIEWED 5 EMAILS TODAY"
-        "\nTHE NEXT EMAIL REVIEW WILL KILL HIM"
-        "\n\nIS THIS EMAIL WORTH HIS LIFE??\n"
     )
     if SUMMARY_PROMPT:
         print("Succesfully built summary prompt.")
