@@ -11,6 +11,7 @@ from config import (
     TRASH_DIR,
 )
 from utils import parse_email
+from display import console
 
 
 def move_to_trash_via_maildir(email_file):
@@ -20,7 +21,7 @@ def move_to_trash_via_maildir(email_file):
     """
     src = os.path.join(MAIN_INBOX, email_file)
     if not os.path.exists(src):
-        print(f"[error] source not found: {src}")
+        console.print(f"[error] source not found: {src}")
         return
     dest_dir = os.path.join(TRASH_DIR, "cur")
     os.makedirs(dest_dir, exist_ok=True)
@@ -28,24 +29,24 @@ def move_to_trash_via_maildir(email_file):
     dst = os.path.join(dest_dir, email_file)
     try:
         shutil.move(src, dst)
-        print(f"[trash] moved: {dst}")
+        console.print(f"[trash] moved: {dst}")
         # Push the deletion to the remote Trash folder
         subprocess.run(["mbsync", "gmail-trash"], check=True)
     except Exception as e:
-        print(f"[error] moving to trash: {e}")
+        console.print(f"[error] moving to trash: {e}")
 
 
 def apply_rule_to_email(email_file, rule):
     file_path = os.path.join(MAIN_INBOX, email_file)
     if not os.path.exists(file_path):
-        print(f"Email file {file_path} does not exist.")
+        console.print(f"Email file {file_path} does not exist.")
         return
 
     action = rule.get("action", "").lower()
     if action == "delete":
         move_to_trash_via_maildir(email_file)
     elif action == "skip":
-        print(f"Skipping email {email_file}.")
+        console.print(f"Skipping email {email_file}.")
     elif action == "move":
         target = rule.get("target", "").lower()
         mapping = {
@@ -56,11 +57,11 @@ def apply_rule_to_email(email_file, rule):
         }
         target_dir = mapping.get(target)
         if not target_dir:
-            print(f"Unknown move target: {target}. Skipping.")
+            console.print(f"Unknown move target: {target}. Skipping.")
             return
         os.makedirs(target_dir, exist_ok=True)
         shutil.move(file_path, os.path.join(target_dir, email_file))
-        print(f"Email {email_file} moved to {target}.")
+        console.print(f"Email {email_file} moved to {target}.")
     elif action == "reply":
         from draft_reply import generate_draft_reply
 
@@ -69,7 +70,7 @@ def apply_rule_to_email(email_file, rule):
             email_file=email_file, view_original=True, view_reply=True, send=send_flag
         )
     else:
-        print(f"Unknown action: {action} for email {email_file}.")
+        console.print(f"Unknown action: {action} for email {email_file}.")
 
 
 def run_rule_on_mailbox(rule):
@@ -129,12 +130,12 @@ def filter_emails(criteria):
 
 
 def interactive_rule_application():
-    print("Interactive Mail Rule Application")
-    print("Available actions: delete, skip, move, reply")
+    console.print("Interactive Mail Rule Application")
+    console.print("Available actions: delete, skip, move, reply")
     action = input("Enter the action to apply: ").strip().lower()
     rule = {"action": action}
     if action == "move":
-        print("Available targets: important, followup, sent, fromgpt")
+        console.print("Available targets: important, followup, sent, fromgpt")
         target = input("Enter the target folder: ").strip().lower()
         rule["target"] = target
     elif action == "reply":
@@ -145,7 +146,7 @@ def interactive_rule_application():
         )
         rule["send"] = send_input == "yes"
 
-    print("Set filtering criteria (leave blank to skip):")
+    console.print("Set filtering criteria (leave blank to skip):")
     sender_filter = input("Filter by sender (email address substring): ").strip()
     subject_filter = input("Filter by subject (substring): ").strip()
     date_filter = input(
@@ -184,12 +185,12 @@ def interactive_rule_application():
             )
 
     if not filtered_emails:
-        print("No emails match the specified criteria.")
+        console.print("No emails match the specified criteria.")
         return
 
-    print("\nMatching Emails:")
+    console.print("\nMatching Emails:")
     for idx, info in enumerate(filtered_emails, start=1):
-        print(
+        console.print(
             f"{idx}. From: {info['sender']} | Subject: {info['subject']} | Date: {info['date_str']}"
         )
 
@@ -210,22 +211,22 @@ def interactive_rule_application():
                 if 0 <= i < len(filtered_emails)
             ]
             if not selected_emails:
-                print("No valid emails selected.")
+                console.print("No valid emails selected.")
                 return
         except Exception as e:
-            print(f"Error during selection: {e}")
+            console.print(f"Error during selection: {e}")
             return
 
-    print("\nThe following emails will have the rule applied:")
+    console.print("\nThe following emails will have the rule applied:")
     for email_file in selected_emails:
         fp = os.path.join(MAIN_INBOX, email_file)
         subj, sndr, _, dstr, _ = parse_email(fp)
-        print(f"From: {sndr} | Subject: {subj} | Date: {dstr}")
+        console.print(f"From: {sndr} | Subject: {subj} | Date: {dstr}")
     final_confirm = (
         input("Are you sure you want to apply the rule? (yes/no): ").strip().lower()
     )
     if final_confirm != "yes":
-        print("Rule application cancelled.")
+        console.print("Rule application cancelled.")
         return
 
     for email_file in selected_emails:

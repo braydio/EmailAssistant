@@ -1,3 +1,6 @@
+from display import console
+
+
 def get_summary_prompt(sender, date_str, subject, body):
     SUMMARY_PROMPT = (
         "Assess this email and summarize briefly. Highlight any critical requests, deadlines, or key context.\n"
@@ -10,7 +13,7 @@ def get_summary_prompt(sender, date_str, subject, body):
         "\nWhat do you recommend? "
     )
     if SUMMARY_PROMPT:
-        print("Succesfully built summary prompt.")
+        console.print("Succesfully built summary prompt.")
         return SUMMARY_PROMPT
 
 
@@ -26,5 +29,5 @@ def get_action_prompt(summary_content):
         "In 2 words tell me what is the ACTION:INDICATOR?\n"
     )
     if ACTION_PROMPT:
-        print("Succesfully built action prompt.")
+        console.print("Succesfully built action prompt.")
         return ACTION_PROMPT

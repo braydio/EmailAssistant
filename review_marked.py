@@ -1,14 +1,12 @@
 # review_marked.py
 import os
 import shutil
-from rich.console import Console
+from display import console
 from rich.table import Table
 from rich.prompt import Prompt
 from utils import parse_email
 from config import FOLLOWUP_DIR, ARCHIVE_DIR, IMPORTANT_DIR, TRASH_DIR
 from draft_reply import generate_draft_reply
-
-console = Console()
 
 
 def move_to_trash_via_maildir(source_dir, email_file):

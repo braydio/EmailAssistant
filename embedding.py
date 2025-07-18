@@ -2,6 +2,7 @@
 import requests
 import logging
 from config import ANYTHING_API_URL, ANYTHING_API_KEY
+from display import console
 
 WORKSPACE_SLUG = "emailgpt"
 
@@ -32,11 +33,13 @@ def send_embedding(file_reference):
     try:
         response = requests.post(embed_url, headers=headers, json=payload)
         if response.status_code == 200:
-            print("Embedding sent successfully.")
+            console.print("Embedding sent successfully.")
             return response.json()
         else:
-            print(f"Embedding request failed with status code: {response.status_code}")
-            print("Response content:", response.content)
+            console.print(
+                f"Embedding request failed with status code: {response.status_code}"
+            )
+            console.print(f"Response content: {response.content}")
             return None
     except Exception as e:
         logging.error(f"Error sending embedding: {e}")

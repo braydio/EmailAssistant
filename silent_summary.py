@@ -9,6 +9,7 @@ import json.decoder
 from summarize import bulk_summarize_and_process_silent
 from config import MAIN_INBOX
 from utils import parse_email
+from display import console
 
 summary_file_path = os.path.expanduser("~/.cache/email_summary_log.json")
 status_path = os.path.expanduser("~/Projects/GPTMail/email_status.json")
@@ -30,7 +31,7 @@ def update_status(icon, text="", tooltip="", processing=False):
             f.write(json_data)
         os.replace(tmp, status_path)
     except json.decoder.JSONDecodeError as e:
-        print(f"[status] JSON encoding error: {e}")
+        console.print(f"[status] JSON encoding error: {e}")
 
 
 def start_icon_animation(stop_event):
@@ -83,7 +84,7 @@ def send_notification(count):
             ]
         )
     except Exception as e:
-        print(f"Notification failed: {e}")
+        console.print(f"Notification failed: {e}")
 
 
 if __name__ == "__main__":
