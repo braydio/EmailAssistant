@@ -2,7 +2,7 @@ import json
 import os
 from rich import print
 from rich.table import Table
-from rich.console import Console
+from display import console
 from config import MAIN_INBOX, ARCHIVE_DIR, FOLLOWUP_DIR, TRASH_DIR, IMPORTANT_DIR
 from summarize import (
     summarize_all_unread_emails,
@@ -17,8 +17,6 @@ from draft_reply import generate_draft_reply
 from mail_rules import interactive_rule_application
 from batch_cleanup import batch_cleanup_analysis
 import review_marked
-
-console = Console()
 
 
 def count_emails(directory):

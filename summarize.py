@@ -6,7 +6,7 @@ import json
 import time
 import random
 from datetime import datetime
-from rich.console import Console
+from display import console, stylize_console
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
@@ -24,12 +24,7 @@ from gpt_api import ask_gpt, get_active_model
 from config import MAIN_INBOX, ARCHIVE_DIR, FOLLOWUP_DIR, TRASH_DIR
 from draft_reply import generate_draft_reply
 
-console = Console()
 STATS_FILE = os.path.expanduser("~/Projects/GPTMail/email_batch_stats.json")
-
-
-def stylize_console(message, style="green"):
-    console.print(f"[{style}]{message}[/{style}]")
 
 
 def summarize_all_unread_emails():

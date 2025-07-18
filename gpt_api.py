@@ -9,10 +9,9 @@ import tiktoken
 from datetime import datetime
 from dotenv import load_dotenv
 from config import USE_LOCAL_LLM, LOCAL_AI_BASE_URL
-from rich.console import Console
+from display import console
 
-# Setup rich console for pretty output
-console = Console()
+# Shared console provided by display module
 
 # Load environment variables from .env file
 project_dir = os.path.dirname(__file__)

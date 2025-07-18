@@ -3,7 +3,7 @@ import json
 import os
 from rich import print
 from rich.table import Table
-from rich.console import Console
+from display import console
 from config import MAIN_INBOX, ARCHIVE_DIR, FOLLOWUP_DIR, TRASH_DIR, IMPORTANT_DIR
 from summarize import (
     summarize_all_unread_emails, 
@@ -14,8 +14,6 @@ from summarize import (
 from manual_review import manual_review_process
 import review_marked
 from draft_reply import generate_draft_reply
-
-console = Console()
 
 def count_emails(directory):
     return len([f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))])
