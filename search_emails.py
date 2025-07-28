@@ -5,6 +5,7 @@ from datetime import datetime
 import subprocess
 from utils import parse_email
 from config import MAIN_INBOX, IMPORTANT_DIR
+from display import console
 
 def search_emails(keyword):
     mailboxes = [("Inbox", MAIN_INBOX), ("Important", IMPORTANT_DIR)]
@@ -42,7 +43,7 @@ def search_emails(keyword):
             email_list.append((email_file, sender, subject, date_str))
     
     if not lines:
-        print(f"No emails found matching the criteria '{keyword}'.")
+        console.print(f"No emails found matching the criteria '{keyword}'.")
         return
 
     try:
@@ -62,11 +63,11 @@ def search_emails(keyword):
                     selected_file = part.replace("File: ", "").strip()
                     break
             if selected_file:
-                print(f"Selected email: {selected_file}")
+                console.print(f"Selected email: {selected_file}")
             else:
-                print("No email selected.")
+                console.print("No email selected.")
         else:
-            print("No email selected.")
+            console.print("No email selected.")
     except Exception as e:
-        print(f"Fuzzy search failed: {e}")
+        console.print(f"Fuzzy search failed: {e}")
 

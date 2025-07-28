@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from config import MAIN_INBOX, IMPORTANT_DIR
 from utils import parse_email
 from gpt_api import ask_gpt
+from display import console
 
 def batch_cleanup_analysis():
     """
@@ -32,7 +33,7 @@ def batch_cleanup_analysis():
 
     top_senders = sender_counts.most_common(3)
     if not top_senders:
-        print("No sender information found.")
+        console.print("No sender information found.")
         return
 
     message_details = "Top 3 Most Frequent Email Senders and Their Emails:\n\n"
@@ -52,13 +53,13 @@ def batch_cleanup_analysis():
         f"Provide a list of filenames for each sender that are candidates for deletion and briefly explain the reasoning."
     )
 
-    print("Sending batch cleanup analysis to ChatGPT...")
+    console.print("Sending batch cleanup analysis to ChatGPT...")
     response = ask_gpt(prompt)
     if response:
-        print("\nChatGPT Recommendation for Cleanup:")
-        print(response)
+        console.print("\nChatGPT Recommendation for Cleanup:")
+        console.print(response)
     else:
-        print("Failed to receive a response from ChatGPT.")
+        console.print("Failed to receive a response from ChatGPT.")
 
 if __name__ == "__main__":
     batch_cleanup_analysis()

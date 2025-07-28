@@ -8,9 +8,7 @@ from bs4 import BeautifulSoup
 from email import message_from_file
 from email.policy import default
 from config import IMAP_HOST, IMAP_USER, IMAP_PASS
-from rich.console import Console
-
-console = Console()
+from display import console
 RULES_FILE = "filter_rules.json"
 
 

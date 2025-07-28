@@ -4,7 +4,7 @@ import shutil
 import json
 import subprocess
 from datetime import datetime
-from rich.console import Console
+from display import console
 from rich.table import Table
 from rich.prompt import Prompt, IntPrompt
 from utils import parse_email, move_message_to_trash_via_imap
@@ -19,8 +19,6 @@ from config import (
     REMOTE_PATH,
 )
 from embedding import send_embedding
-
-console = Console()
 
 
 def move_to_trash_via_maildir(email_file):
