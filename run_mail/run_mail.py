@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Batch process emails using embeddings and GPT-driven classification."""
+
 import datetime
 import json
 import os
@@ -10,7 +12,7 @@ from email.policy import default
 from glob import glob
 
 import numpy as np
-import openai
+from openai import OpenAI
 from dotenv import load_dotenv
 
 # ─── load config ───────────────────────────────────────────────────────────────
@@ -21,10 +23,7 @@ EMB_FILE = os.getenv("EMB_FILE", "/data/embeddings.jsonl")
 API_KEY = os.getenv("OPENAI_API_KEY", "")
 API_BASE = os.getenv("LOCAL_API_URL", "")
 THRESH_SIM = float(os.getenv("KNN_THRESHOLD", "0.80"))
-
-openai.api_key = API_KEY
-if API_BASE:
-    openai.api_base = API_BASE
+client = OpenAI(api_key=API_KEY, base_url=API_BASE or None)
 
 # ─── maildirs ────────────────────────────────────────────────────────────────
 dirs = dict(
@@ -40,9 +39,11 @@ for d in dirs.values():
 
 
 # ─── embedding utils ──────────────────────────────────────────────────────────
-def embed_text(text):
-    resp = openai.Embedding.create(model="text-embedding-3-small", input=text)
-    return resp["data"][0]["embedding"]
+def embed_text(text: str) -> list:
+    """Return an embedding vector for the given text."""
+
+    resp = client.embeddings.create(model="text-embedding-3-small", input=text)
+    return resp.data[0].embedding
 
 
 def load_embeddings():
@@ -88,13 +89,15 @@ counts = {"JUNK": 0, "REVIEW": 0, "REPLY": 0}
 embs_db = load_embeddings()
 
 
-def classify_email(subject, body):
+def classify_email(subject: str, body: str) -> str:
+    """Classify an email as JUNK, REVIEW, or REPLY."""
+
     # 1) try k-NN
     label = knn_label(subject, body, embs_db)
     if label:
         return label
     # 2) fallback to LLM
-    resp = openai.ChatCompletion.create(
+    resp = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
             {
@@ -108,8 +111,10 @@ def classify_email(subject, body):
     return resp.choices[0].message.content.strip().upper()
 
 
-def draft_reply(subject, body):
-    resp = openai.ChatCompletion.create(
+def draft_reply(subject: str, body: str) -> str:
+    """Draft a short reply using the chat completion model."""
+
+    resp = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": "Draft a concise reply to this email."},
