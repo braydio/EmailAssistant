@@ -8,7 +8,6 @@ import openai
 import os
 import json
 import requests
-import base64
 import logging
 import tiktoken
 from datetime import datetime
@@ -26,9 +25,11 @@ load_dotenv(env_path)
 
 username = os.getenv("WEBUI_USR")
 password = os.getenv("WEBUI_PSWD")
-openai.api_key = os.getenv("OPENAI_API_KEY")
+API_KEY = os.getenv("OPENAI_API_KEY")
+BASE_URL = os.getenv("OPENAI_BASE_URL")
+client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
 
-if not openai.api_key and not USE_LOCAL_LLM:
+if not API_KEY and not USE_LOCAL_LLM:
     raise ValueError(
         "OPENAI_API_KEY environment variable not set or failed to load from .env."
     )
@@ -132,6 +133,8 @@ def format_api_response(api_response):
 
 
 def ask_gpt(prompt, model=""):  # Qwen2.5-Coder-7B-Instruct
+    """Send a prompt to the configured language model and return a response."""
+
     token_count = count_tokens(prompt, model=model)
     if USE_LOCAL_LLM:
         try:
@@ -146,17 +149,17 @@ def ask_gpt(prompt, model=""):  # Qwen2.5-Coder-7B-Instruct
             logging.error(f"Error during LocalAI call: {e}")
             return None
     else:
-        if not openai.api_key:
+        if not API_KEY:
             raise RuntimeError(
                 "OpenAI API key is not set. Please check .env and environment variables."
             )
         try:
-            api_response = openai.ChatCompletion.create(
+            api_response = client.chat.completions.create(
                 model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}]
             )
-            text = api_response["choices"][0]["message"]["content"]
-            log_gpt_request(prompt, api_response, token_count)
-            return format_api_response(text)
+            api_dict = api_response.model_dump()
+            log_gpt_request(prompt, api_dict, token_count)
+            return format_api_response(api_dict)
         except Exception as e:
             logging.error(f"Error during GPT API call: {e}")
             return None
