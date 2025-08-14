@@ -1,4 +1,9 @@
-# gpt_api.py
+"""Utility functions for interacting with GPT models.
+
+This module provides helper functions for calling either OpenAI's hosted
+models or a locally hosted API, depending on configuration.
+"""
+
 import openai
 import os
 import json

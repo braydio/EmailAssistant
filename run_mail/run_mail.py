@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""Mail processing pipeline for classification and reply drafting.
+
+This script embeds incoming emails, classifies them, and optionally drafts
+responses. It can operate against a local OpenAI-compatible API when
+``LOCAL_AI_BASE_URL`` is configured.
+"""
+
 import datetime
 import json
 import os
@@ -12,6 +19,7 @@ from glob import glob
 import numpy as np
 import openai
 from dotenv import load_dotenv
+from config import LOCAL_AI_BASE_URL
 
 # ─── load config ───────────────────────────────────────────────────────────────
 load_dotenv()
@@ -19,12 +27,11 @@ MAILDIR = os.getenv("MAILDIR_ROOT", os.path.expanduser("~/.mail/Gmail"))
 REPORT_PATH = os.getenv("REPORT_PATH", "/reports/email_report.md")
 EMB_FILE = os.getenv("EMB_FILE", "/data/embeddings.jsonl")
 API_KEY = os.getenv("OPENAI_API_KEY", "")
-API_BASE = os.getenv("LOCAL_API_URL", "")
 THRESH_SIM = float(os.getenv("KNN_THRESHOLD", "0.80"))
 
 openai.api_key = API_KEY
-if API_BASE:
-    openai.api_base = API_BASE
+if LOCAL_AI_BASE_URL:
+    openai.api_base = LOCAL_AI_BASE_URL
 
 # ─── maildirs ────────────────────────────────────────────────────────────────
 dirs = dict(
