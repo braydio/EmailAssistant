@@ -1,12 +1,10 @@
-"""Utilities for interacting with OpenAI or local language models.
+"""Utility functions for interacting with GPT models.
 
-This module centralizes GPT-related helpers such as token counting, request
-logging and calling either the OpenAI API or a locally hosted LLM. It uses the
-new :class:`OpenAI` client for compatibility with both remote and
-OpenAI-compatible local endpoints.
+This module provides helper functions for calling either OpenAI's hosted
+models or a locally hosted API, depending on configuration.
 """
 
-from openai import OpenAI
+import openai
 import os
 import json
 import requests

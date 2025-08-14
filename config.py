@@ -1,4 +1,10 @@
-# config.py
+"""Application configuration utilities.
+
+This module centralizes environment configuration for the project. It loads
+settings from a ``.env`` file when present and exposes constants used
+throughout the codebase.
+"""
+
 import os
 from dotenv import load_dotenv
 
@@ -26,9 +32,15 @@ IMAP_USER = os.getenv("IMAP_USER")
 IMAP_PASS = os.getenv("IMAP_PASS")
 
 # LLM Configuration
-USE_LOCAL_LLM = "true"
+LOCAL_AI_IP = os.getenv("LOCAL_AI_IP", "192.168.1.69")
+OLLAMA_PORT = os.getenv("OLLAMA_PORT", "11434")
+TEXTGEN_PORT = os.getenv("TEXTGEN_PORT", "5150")
 
-LOCAL_AI_BASE_URL = os.getenv("LOCAL_AI_URL")
+# Whether to use a locally hosted language model
+USE_LOCAL_LLM = os.getenv("USE_LOCAL_LLM", "true").lower() in {"1", "true", "yes"}
+
+# Base URL for the local text generation server
+LOCAL_AI_BASE_URL = f"http://{LOCAL_AI_IP}:{TEXTGEN_PORT}"
 ANYTHING_API_URL = os.getenv("ANYTHING_API_URL")
 ANYTHING_API_KEY = os.getenv("ANYTHING_API_KEY")
 
