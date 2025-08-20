@@ -1,18 +1,20 @@
-"""Utility functions for interacting with GPT models.
+"""Utility functions for interacting with language models.
 
 This module provides helper functions for calling either OpenAI's hosted
-models or a locally hosted API, depending on configuration.
+models or a locally hosted Ollama server, depending on configuration.
 """
 
 import openai
+from openai import OpenAI
 import os
 import json
 import requests
 import logging
 import tiktoken
+import time
 from datetime import datetime
 from dotenv import load_dotenv
-from config import USE_LOCAL_LLM, LOCAL_AI_BASE_URL
+from config import USE_LOCAL_LLM, OLLAMA_BASE_URL
 from rich.console import Console
 
 # Setup rich console for pretty output
@@ -48,17 +50,29 @@ def count_tokens(prompt, model="gpt-4o-mini"):
 
 
 def log_gpt_request(
-    prompt, api_response, token_count, log_file_path="gpt_requests.log"
+    prompt,
+    api_response,
+    token_count,
+    elapsed_time,
+    model_name=None,
+    log_file_path="gpt_requests.log",
 ):
+    """Log details of a model interaction for auditing and timing analysis."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    model_used = api_response.get("model", "Unknown Model")
+    model_used = model_name or api_response.get("model", "Unknown Model")
     total_tokens = api_response.get("usage", {}).get("total_tokens", "Unknown")
+    server_time_ns = api_response.get("total_duration")
+    server_time_ms = (
+        f"{server_time_ns / 1_000_000:.2f}" if server_time_ns else "Unknown"
+    )
     log_entry = (
         "\n=== GPT Interaction ===\n"
         f"Timestamp           : {timestamp}\n"
         f"Model               : {model_used}\n"
         f"Request Tokens      : {token_count}\n"
-        f"Total Tokens Used   : {total_tokens}\n\n"
+        f"Total Tokens Used   : {total_tokens}\n"
+        f"Elapsed Time (s)    : {elapsed_time:.3f}\n"
+        f"Server Time (ms)    : {server_time_ms}\n\n"
         "--- PROMPT START ---\n"
         f"{prompt}\n"
         "--- PROMPT END ---\n\n"
@@ -74,35 +88,32 @@ def log_gpt_request(
         logging.error(f"Error writing GPT log entry: {e}")
 
 
-def call_local_embedding(text):
+def call_ollama_embedding(text, model="nomic-embed-text"):
+    """Request embeddings from the local Ollama server."""
     try:
-        url = f"{LOCAL_AI_BASE_URL}/v1/embeddings"
-        payload = {"model": "nomic-embed-text-v1.5", "input": text}
-        response = requests.post(url, json=payload)
+        url = f"{OLLAMA_BASE_URL}/v1/embeddings"
+        payload = {"model": model, "input": text}
+        response = requests.post(url, json=payload, timeout=30)
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        logging.error(f"Local Embedding call failed: {e}")
+        logging.error(f"Ollama embedding call failed: {e}")
         return {"error": str(e)}
 
 
-def call_local_llm(prompt, model="mistral"):
+def call_ollama_llm(prompt, model="llama3.1"):
+    """Send a chat request to the local Ollama server."""
     try:
-        url = f"{LOCAL_AI_BASE_URL}/v1/chat/completions"
+        url = f"{OLLAMA_BASE_URL}/v1/chat/completions"
         console.print(
-            f"[blue]Sending to URL LocalAI at: {url}\n Message: {prompt}[/blue]"
+            f"[blue]Sending to Ollama at: {url}\n Message: {prompt}[/blue]"
         )
-        payload = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 1000,
-            "temperature": 0.2,
-        }
-        response = requests.post(url, json=payload)
+        payload = {"model": model, "messages": [{"role": "user", "content": prompt}]}
+        response = requests.post(url, json=payload, timeout=60)
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        logging.error(f"Local LLM call failed: {e}")
+        logging.error(f"Ollama LLM call failed: {e}")
         return {"error": str(e)}
 
 
@@ -120,6 +131,12 @@ def format_api_response(api_response):
                     "sources": [],
                     "close": False,
                 }
+            if "message" in api_response and "content" in api_response["message"]:
+                return {
+                    "text": api_response["message"]["content"].strip(),
+                    "sources": [],
+                    "close": False,
+                }
             if "textResponse" in api_response:
                 return {
                     "text": api_response["textResponse"].strip(),
@@ -132,33 +149,44 @@ def format_api_response(api_response):
         return {"text": None, "sources": [], "close": False, "error": str(e)}
 
 
-def ask_gpt(prompt, model=""):  # Qwen2.5-Coder-7B-Instruct
+def ask_gpt(prompt, model=None):
     """Send a prompt to the configured language model and return a response."""
 
-    token_count = count_tokens(prompt, model=model)
     if USE_LOCAL_LLM:
+        model_to_use = model or get_active_model()
+        token_count = count_tokens(prompt, model=model_to_use)
         try:
             console.print(
-                f"[bold green]Calling {model} at {LOCAL_AI_BASE_URL}[/bold green]"
+                f"[bold green]Calling {model_to_use} at {OLLAMA_BASE_URL}[/bold green]"
             )
-            api_response = call_local_llm(prompt, model=model)
+            start = time.perf_counter()
+            api_response = call_ollama_llm(prompt, model=model_to_use)
+            elapsed = time.perf_counter() - start
             formatted_response = format_api_response(api_response)
-            log_gpt_request(prompt, api_response, token_count)
+            log_gpt_request(
+                prompt, api_response, token_count, elapsed, model_to_use
+            )
             return formatted_response
         except Exception as e:
-            logging.error(f"Error during LocalAI call: {e}")
+            logging.error(f"Error during Ollama call: {e}")
             return None
     else:
+        model_to_use = model or "gpt-4o-mini"
+        token_count = count_tokens(prompt, model=model_to_use)
         if not API_KEY:
             raise RuntimeError(
                 "OpenAI API key is not set. Please check .env and environment variables."
             )
         try:
+            start = time.perf_counter()
             api_response = client.chat.completions.create(
-                model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}]
+                model=model_to_use, messages=[{"role": "user", "content": prompt}]
             )
+            elapsed = time.perf_counter() - start
             api_dict = api_response.model_dump()
-            log_gpt_request(prompt, api_dict, token_count)
+            log_gpt_request(
+                prompt, api_dict, token_count, elapsed, model_to_use
+            )
             return format_api_response(api_dict)
         except Exception as e:
             logging.error(f"Error during GPT API call: {e}")
@@ -166,11 +194,15 @@ def ask_gpt(prompt, model=""):  # Qwen2.5-Coder-7B-Instruct
 
 
 def get_active_model():
+    """Return the first available model reported by the local Ollama server."""
     try:
-        url = f"{LOCAL_AI_BASE_URL}/v1/internal/model/info"
+        url = f"{OLLAMA_BASE_URL}/v1/models"
         response = requests.get(url, timeout=3)
         response.raise_for_status()
-        return response.json().get("model_name", "mistral")
+        models = response.json().get("data", [])
+        if models:
+            return models[0].get("id", "Unknown")
+        return "Unknown"
     except Exception as e:
         logging.warning(f"Could not get active model: {e}")
         return "Unknown"

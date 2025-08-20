@@ -22,7 +22,14 @@ Create a `.env` file in the project root with the following:
 OPENAI_API_KEY=<your_openai_api_key>
 EMAIL_ADDRESS=<your_email_address>
 EMAIL_SMTP_PROFILE=gmail  # msmtp profile name
+LOCAL_AI_IP=127.0.0.1       # Ollama host
+OLLAMA_PORT=11434           # Ollama API port
 ```
+
+The application defaults to using a local [Ollama](https://ollama.com) server
+for language model interactions via its OpenAI-compatible `/v1` API.
+Set `LOCAL_AI_IP` and `OLLAMA_PORT` to match
+your environment if the defaults differ.
 
 ### 4. Configure msmtp
 Ensure msmtp is configured correctly for sending emails. Example configuration in `~/.msmtprc`:
