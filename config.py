@@ -39,8 +39,10 @@ TEXTGEN_PORT = os.getenv("TEXTGEN_PORT", "5150")
 # Whether to use a locally hosted language model
 USE_LOCAL_LLM = os.getenv("USE_LOCAL_LLM", "true").lower() in {"1", "true", "yes"}
 
-# Base URL for the local text generation server
-LOCAL_AI_BASE_URL = f"http://{LOCAL_AI_IP}:{TEXTGEN_PORT}"
+# Base URLs for local model servers
+OLLAMA_BASE_URL = f"http://{LOCAL_AI_IP}:{OLLAMA_PORT}"
+# Maintained for backward compatibility
+LOCAL_AI_BASE_URL = OLLAMA_BASE_URL
 ANYTHING_API_URL = os.getenv("ANYTHING_API_URL")
 ANYTHING_API_KEY = os.getenv("ANYTHING_API_KEY")
 
