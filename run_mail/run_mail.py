@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""Utility script for classifying and replying to emails.
+
+This module embeds message content, labels incoming mail, and drafts
+responses using either OpenAI or a local LLM based on configuration.
+"""
+
 import datetime
 import json
 import os
@@ -12,6 +18,7 @@ from glob import glob
 import numpy as np
 import openai
 from dotenv import load_dotenv
+from embedding_engine import embed_text
 
 # ─── load config ───────────────────────────────────────────────────────────────
 load_dotenv()
@@ -39,13 +46,9 @@ for d in dirs.values():
     os.makedirs(os.path.join(d, "cur"), exist_ok=True)
 
 
-# ─── embedding utils ──────────────────────────────────────────────────────────
-def embed_text(text):
-    resp = openai.Embedding.create(model="text-embedding-3-small", input=text)
-    return resp["data"][0]["embedding"]
-
-
 def load_embeddings():
+    """Return existing embeddings from ``EMB_FILE`` if it exists."""
+
     embs = []
     if os.path.exists(EMB_FILE):
         for line in open(EMB_FILE):
@@ -54,6 +57,8 @@ def load_embeddings():
 
 
 def save_embedding(subject, body, label):
+    """Persist an embedding and metadata for a processed email."""
+
     record = dict(
         subject=subject,
         body=body,
@@ -66,6 +71,8 @@ def save_embedding(subject, body, label):
 
 
 def knn_label(subject, body, embs):
+    """Return the nearest-neighbor label if similarity exceeds ``THRESH_SIM``."""
+
     if not embs:
         return None
     query = np.array(embed_text(subject + "\n\n" + body))
@@ -122,6 +129,8 @@ def draft_reply(subject, body):
 
 # ─── processing loop ─────────────────────────────────────────────────────────
 def process_folder(src):
+    """Process emails in ``src`` and triage them into target folders."""
+
     for sub in ("new", "cur"):
         for path in glob(os.path.join(src, sub, "*")):
             # parse email
@@ -130,7 +139,7 @@ def process_folder(src):
                 subj = msg.get("subject", "")
                 part = msg.get_body(preferencelist=("plain",))
                 body = part.get_content() if part else ""
-            except:
+            except Exception:
                 subj, body = "", ""
             label = classify_email(subj, body)
             counts[label] += 1

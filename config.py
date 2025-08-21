@@ -1,4 +1,9 @@
-# config.py
+"""Configuration settings for EmailAssistant.
+
+This module loads environment variables and centralizes paths, mail settings,
+and model selection flags used across the project.
+"""
+
 import os
 from dotenv import load_dotenv
 
@@ -26,7 +31,8 @@ IMAP_USER = os.getenv("IMAP_USER")
 IMAP_PASS = os.getenv("IMAP_PASS")
 
 # LLM Configuration
-USE_LOCAL_LLM = "true"
+# Determines whether to use a locally hosted model or the OpenAI API.
+USE_LOCAL_LLM = os.getenv("USE_LOCAL_LLM", "false").lower() == "true"
 
 LOCAL_AI_BASE_URL = os.getenv("LOCAL_AI_URL")
 ANYTHING_API_URL = os.getenv("ANYTHING_API_URL")
