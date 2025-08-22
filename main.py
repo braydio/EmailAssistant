@@ -2,8 +2,10 @@
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
+import sys
 
 from rich import print
 from rich.table import Table
@@ -18,15 +20,40 @@ console = Console()
 
 
 def launch_in_new_terminal(command):
-    """Run ``command`` in a separate terminal window."""
-    terminal = shutil.which("x-terminal-emulator") or shutil.which("gnome-terminal")
-    if terminal:
-        if os.path.basename(terminal) == "gnome-terminal":
-            subprocess.Popen([terminal, "--", *command])
-        else:
-            subprocess.Popen([terminal, "-e", " ".join(command)])
-    else:
-        subprocess.Popen(command)
+    """Run ``command`` in a separate terminal window if possible.
+
+    Attempts to open a new terminal on macOS, Windows, and Linux. If no
+    suitable terminal emulator is found, falls back to running the command in
+    the current window.
+    """
+
+    if sys.platform.startswith("darwin"):
+        script = f'tell app "Terminal" to do script "{shlex.join(command)}"'
+        subprocess.Popen(["osascript", "-e", script])
+        return
+
+    if os.name == "nt":
+        subprocess.Popen(["start", "cmd", "/k", *command], shell=True)
+        return
+
+    terminal_candidates = [
+        ["x-terminal-emulator", "-e"],
+        ["gnome-terminal", "--"],
+        ["konsole", "-e"],
+        ["xfce4-terminal", "-e"],
+        ["xterm", "-e"],
+        ["lxterminal", "-e"],
+        ["terminator", "-x"],
+    ]
+
+    for term in terminal_candidates:
+        terminal_path = shutil.which(term[0])
+        if terminal_path:
+            subprocess.Popen([terminal_path, *term[1:], *command])
+            return
+
+    print("[yellow]No compatible terminal found. Running in current window.[/yellow]")
+    subprocess.Popen(command)
 
 
 def count_emails(directory):
