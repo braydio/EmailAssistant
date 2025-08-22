@@ -27,7 +27,8 @@ OLLAMA_PORT=11434           # Ollama API port
 ```
 
 The application defaults to using a local [Ollama](https://ollama.com) server
-for language model interactions. Set `LOCAL_AI_IP` and `OLLAMA_PORT` to match
+for language model interactions via its OpenAI-compatible `/v1` API.
+Set `LOCAL_AI_IP` and `OLLAMA_PORT` to match
 your environment if the defaults differ.
 
 ### 4. Configure msmtp

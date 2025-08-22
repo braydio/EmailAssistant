@@ -91,8 +91,8 @@ def log_gpt_request(
 def call_ollama_embedding(text, model="nomic-embed-text"):
     """Request embeddings from the local Ollama server."""
     try:
-        url = f"{OLLAMA_BASE_URL}/api/embeddings"
-        payload = {"model": model, "prompt": text}
+        url = f"{OLLAMA_BASE_URL}/v1/embeddings"
+        payload = {"model": model, "input": text}
         response = requests.post(url, json=payload, timeout=30)
         response.raise_for_status()
         return response.json()
@@ -101,15 +101,13 @@ def call_ollama_embedding(text, model="nomic-embed-text"):
         return {"error": str(e)}
 
 
-def call_ollama_llm(prompt, model="llama3.1"):
+def call_ollama_llm(prompt, model="qwen2.5-coder:0.5b"):
     """Send a chat request to the local Ollama server."""
     try:
-        url = f"{OLLAMA_BASE_URL}/api/chat"
-        console.print(
-            f"[blue]Sending to Ollama at: {url}\n Message: {prompt}[/blue]"
-        )
+        url = f"{OLLAMA_BASE_URL}/v1/chat/completions"
+        console.print(f"[blue]Sending to Ollama at: {url}\n Message: {prompt}[/blue]")
         payload = {"model": model, "messages": [{"role": "user", "content": prompt}]}
-        response = requests.post(url, json=payload, timeout=60)
+        response = requests.post(url, json=payload, timeout=360)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -163,9 +161,7 @@ def ask_gpt(prompt, model=None):
             api_response = call_ollama_llm(prompt, model=model_to_use)
             elapsed = time.perf_counter() - start
             formatted_response = format_api_response(api_response)
-            log_gpt_request(
-                prompt, api_response, token_count, elapsed, model_to_use
-            )
+            log_gpt_request(prompt, api_response, token_count, elapsed, model_to_use)
             return formatted_response
         except Exception as e:
             logging.error(f"Error during Ollama call: {e}")
@@ -184,9 +180,7 @@ def ask_gpt(prompt, model=None):
             )
             elapsed = time.perf_counter() - start
             api_dict = api_response.model_dump()
-            log_gpt_request(
-                prompt, api_dict, token_count, elapsed, model_to_use
-            )
+            log_gpt_request(prompt, api_dict, token_count, elapsed, model_to_use)
             return format_api_response(api_dict)
         except Exception as e:
             logging.error(f"Error during GPT API call: {e}")
@@ -194,14 +188,14 @@ def ask_gpt(prompt, model=None):
 
 
 def get_active_model():
-    """Return the first running model reported by the local Ollama server."""
+    """Return the first available model reported by the local Ollama server."""
     try:
-        url = f"{OLLAMA_BASE_URL}/api/ps"
+        url = f"{OLLAMA_BASE_URL}/v1/models"
         response = requests.get(url, timeout=3)
         response.raise_for_status()
-        models = response.json().get("models", [])
+        models = response.json().get("data", [])
         if models:
-            return models[0].get("model") or models[0].get("name", "Unknown")
+            return models[0].get("id", "Unknown")
         return "Unknown"
     except Exception as e:
         logging.warning(f"Could not get active model: {e}")
