@@ -9,14 +9,7 @@ from rich import print
 from rich.table import Table
 from rich.console import Console
 from config import MAIN_INBOX, ARCHIVE_DIR, FOLLOWUP_DIR, TRASH_DIR, IMPORTANT_DIR
-from summarize import (
-    summarize_all_unread_emails,
-    summarize_specific_email,  # new two-step process function
-    bulk_summarize_and_process_silent,
-    apply_filter_rules,
-    reply_to_email,
-    search_emails,
-)
+from summarize import apply_filter_rules, reply_to_email, search_emails
 from draft_reply import generate_draft_reply
 from mail_rules import interactive_rule_application
 from batch_cleanup import batch_cleanup_analysis
@@ -105,8 +98,8 @@ def print_menu():
     table.add_column("Action", style="bold white")
 
     menu_options = {
-        "1": "Summarize all unread emails (New Process)",
-        "2": "Silent Bulk Summarize and Process emails",
+        "1": "Summarize all unread emails (New Process, new window)",
+        "2": "Silent Bulk Summarize and Process emails (new window)",
         "3": "Fuzzy Find an email for reply",
         "4": "Generate and send a draft reply",
         "5": "Review Flagged Emails (AI-flagged, new window)",
@@ -117,7 +110,7 @@ def print_menu():
         "10": "Manual Review Process (with Embedding, new window)",
         "11": "Clear Archive Box",
         "12": "Review Important Emails (new window)",
-        "13": "Run silent GPT summary & auto-apply (no confirm)",  # <- NEW OPTION
+        "13": "Run silent GPT summary & auto-apply (no confirm, new window)",  # <- NEW OPTION
         "0": "[bold red]Exit[/bold red]",
     }
 
@@ -137,13 +130,32 @@ def main():
 
         if choice == "1":
             # Uses the new two-step summarization (summary then action) for all unread emails.
-            summarize_all_unread_emails()
+            launch_in_new_terminal(
+                [
+                    "python",
+                    "-c",
+                    (
+                        "from summarize import summarize_all_unread_emails; "
+                        "summarize_all_unread_emails()"
+                    ),
+                ]
+            )
         elif choice == "2":
             num = input(
                 "Enter number of emails to process silently (or press Enter for all): "
             ).strip()
             num_emails = int(num) if num.isdigit() else None
-            bulk_summarize_and_process_silent(num_emails)
+            num_repr = repr(num_emails)
+            launch_in_new_terminal(
+                [
+                    "python",
+                    "-c",
+                    (
+                        "from summarize import bulk_summarize_and_process_silent; "
+                        f"bulk_summarize_and_process_silent({num_repr})"
+                    ),
+                ]
+            )
         elif choice == "3":
             reply_to_email()
         elif choice == "4":
@@ -186,7 +198,16 @@ def main():
             console.print(
                 "[bold yellow]Running silent mode — no confirmation, all actions will be applied.[/bold yellow]"
             )
-            bulk_summarize_and_process_silent(num_emails=200, confirm_all=True)
+            launch_in_new_terminal(
+                [
+                    "python",
+                    "-c",
+                    (
+                        "from summarize import bulk_summarize_and_process_silent; "
+                        "bulk_summarize_and_process_silent(num_emails=200, confirm_all=True)"
+                    ),
+                ]
+            )
         elif choice == "0":
             console.print("[bold red]Goodbye! [/bold red]")
             break
