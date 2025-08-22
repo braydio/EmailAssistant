@@ -1,5 +1,10 @@
+"""Menu-driven command-line interface for managing email workflows."""
+
 import json
 import os
+import shutil
+import subprocess
+
 from rich import print
 from rich.table import Table
 from rich.console import Console
@@ -12,13 +17,23 @@ from summarize import (
     reply_to_email,
     search_emails,
 )
-from manual_review import manual_review_process
 from draft_reply import generate_draft_reply
 from mail_rules import interactive_rule_application
 from batch_cleanup import batch_cleanup_analysis
-import review_marked
 
 console = Console()
+
+
+def launch_in_new_terminal(command):
+    """Run ``command`` in a separate terminal window."""
+    terminal = shutil.which("x-terminal-emulator") or shutil.which("gnome-terminal")
+    if terminal:
+        if os.path.basename(terminal) == "gnome-terminal":
+            subprocess.Popen([terminal, "--", *command])
+        else:
+            subprocess.Popen([terminal, "-e", " ".join(command)])
+    else:
+        subprocess.Popen(command)
 
 
 def count_emails(directory):
@@ -94,14 +109,14 @@ def print_menu():
         "2": "Silent Bulk Summarize and Process emails",
         "3": "Fuzzy Find an email for reply",
         "4": "Generate and send a draft reply",
-        "5": "Review Flagged Emails (AI-flagged)",
+        "5": "Review Flagged Emails (AI-flagged, new window)",
         "6": "Search emails by keyword/date",
         "7": "Apply Filter Rules (Interactive)",
         "8": "Apply Mail Rule (Interactive)",
         "9": "Batch Cleanup Analysis (Top Senders)",
-        "10": "Manual Review Process (with Embedding)",
+        "10": "Manual Review Process (with Embedding, new window)",
         "11": "Clear Archive Box",
-        "12": "Review Important Emails",
+        "12": "Review Important Emails (new window)",
         "13": "Run silent GPT summary & auto-apply (no confirm)",  # <- NEW OPTION
         "0": "[bold red]Exit[/bold red]",
     }
@@ -137,7 +152,13 @@ def main():
             )
             generate_draft_reply(send=True)
         elif choice == "5":
-            review_marked.review_marked_emails()
+            launch_in_new_terminal(
+                [
+                    "python",
+                    "-c",
+                    "import review_marked; review_marked.review_marked_emails()",
+                ]
+            )
         elif choice == "6":
             keyword = input(
                 "Enter keyword or date (YYYY-MM-DD) / range (YYYY-MM-DD to YYYY-MM-DD): "
@@ -150,17 +171,17 @@ def main():
         elif choice == "9":
             batch_cleanup_analysis()
         elif choice == "10":
-            try:
-                num = int(input("Enter number of emails to review manually: ").strip())
-            except ValueError:
-                console.print("[bold red]Invalid number.[/bold red]")
-                num = 0
-            if num > 0:
-                manual_review_process(num)
+            launch_in_new_terminal(["python", "manual_review.py"])
         elif choice == "11":
             clear_archive()
         elif choice == "12":
-            review_marked.review_important_emails()
+            launch_in_new_terminal(
+                [
+                    "python",
+                    "-c",
+                    "import review_marked; review_marked.review_important_emails()",
+                ]
+            )
         elif choice == "13":
             console.print(
                 "[bold yellow]Running silent mode — no confirmation, all actions will be applied.[/bold yellow]"
