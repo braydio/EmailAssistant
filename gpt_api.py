@@ -101,7 +101,7 @@ def call_ollama_embedding(text, model="nomic-embed-text"):
         return {"error": str(e)}
 
 
-def call_ollama_llm(prompt, model="llama3.1"):
+def call_ollama_llm(prompt, model="qwen2.5-coder:0.5b"):
     """Send a chat request to the local Ollama server."""
     try:
         url = f"{OLLAMA_BASE_URL}/v1/chat/completions"
