@@ -6,6 +6,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 
 from rich import print
 from rich.table import Table
@@ -54,6 +55,33 @@ def launch_in_new_terminal(command):
 
     print("[yellow]No compatible terminal found. Running in current window.[/yellow]")
     subprocess.Popen(command)
+
+
+def launch_in_background(command):
+    """Run ``command`` asynchronously and stream output to this console.
+
+    The spawned process runs in the background while its logs are printed
+    line-by-line to the current terminal, allowing the user to continue using
+    the menu concurrently.
+    """
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+    def _stream_output():
+        assert process.stdout is not None
+        for line in process.stdout:
+            console.print(f"[dim]{line.rstrip()}[/dim]")
+
+    threading.Thread(target=_stream_output, daemon=True).start()
+
+    console.print(f"[green]Started background process PID {process.pid}.[/green]")
+    return process
 
 
 def count_emails(directory):
@@ -126,7 +154,7 @@ def print_menu():
 
     menu_options = {
         "1": "Summarize all unread emails (New Process, new window)",
-        "2": "Silent Bulk Summarize and Process emails (new window)",
+        "2": "Silent Bulk Summarize and Process emails (background)",
         "3": "Fuzzy Find an email for reply",
         "4": "Generate and send a draft reply",
         "5": "Review Flagged Emails (AI-flagged, new window)",
@@ -173,13 +201,13 @@ def main():
             ).strip()
             num_emails = int(num) if num.isdigit() else None
             num_repr = repr(num_emails)
-            launch_in_new_terminal(
+            launch_in_background(
                 [
                     "python",
                     "-c",
                     (
                         "from summarize import bulk_summarize_and_process_silent; "
-                        f"bulk_summarize_and_process_silent({num_repr})"
+                        f"bulk_summarize_and_process_silent({num_repr}, confirm_all=True)"
                     ),
                 ]
             )
