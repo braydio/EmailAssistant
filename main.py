@@ -15,6 +15,7 @@ from summarize import apply_filter_rules, reply_to_email, search_emails
 from draft_reply import generate_draft_reply
 from mail_rules import interactive_rule_application
 from batch_cleanup import batch_cleanup_analysis
+from gpt_api import get_active_provider
 
 console = Console()
 
@@ -120,7 +121,17 @@ def clear_archive():
 
 
 def print_menu():
-    table = Table(title="📌 Email Assistant Menu", style="bold green")
+    """Render the main menu table with the active AI provider.
+
+    Returns:
+        None: The menu output is written directly to the console.
+    """
+
+    provider = get_active_provider()
+    table = Table(
+        title=f"📌 Email Assistant Menu • Provider: {provider}",
+        style="bold green",
+    )
     table.add_column("Option", style="bold cyan")
     table.add_column("Action", style="bold white")
 

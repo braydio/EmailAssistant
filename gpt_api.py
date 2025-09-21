@@ -13,8 +13,14 @@ import logging
 import tiktoken
 import time
 from datetime import datetime
+from urllib.parse import urlparse
 from dotenv import load_dotenv
-from config import USE_LOCAL_LLM, OLLAMA_BASE_URL
+from config import (
+    USE_LOCAL_LLM,
+    OLLAMA_BASE_URL,
+    OLLAMA_PORT,
+    TEXTGEN_PORT,
+)
 from rich.console import Console
 
 # Setup rich console for pretty output
@@ -185,6 +191,47 @@ def ask_gpt(prompt, model=None):
         except Exception as e:
             logging.error(f"Error during GPT API call: {e}")
             return None
+
+
+def get_active_provider():
+    """Return a descriptive name for the configured language model provider.
+
+    Returns
+    -------
+    str
+        Human readable identifier describing the provider that will handle
+        language model requests (e.g., ``"Ollama"`` or ``"OpenAI"``).
+    """
+
+    if USE_LOCAL_LLM:
+        return "Ollama"
+
+    if BASE_URL:
+        normalized_url = BASE_URL.lower()
+        try:
+            parsed_url = urlparse(BASE_URL)
+            detected_port = str(parsed_url.port) if parsed_url.port else ""
+        except ValueError:
+            detected_port = ""
+
+        textgen_signatures = ("textgen", "text-generation-webui", "oobabooga")
+        if any(signature in normalized_url for signature in textgen_signatures) or (
+            detected_port == str(TEXTGEN_PORT)
+        ):
+            return "textgeneration-webui"
+
+        if "ollama" in normalized_url or detected_port == str(OLLAMA_PORT):
+            return "Ollama"
+
+        if "openai" in normalized_url:
+            return "OpenAI"
+
+        return "Other"
+
+    if API_KEY:
+        return "OpenAI"
+
+    return "Unknown"
 
 
 def get_active_model():
